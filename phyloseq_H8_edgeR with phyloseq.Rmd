@@ -1,0 +1,238 @@
+---
+title: "phyloseq_H8_edgeR with phyloseq"
+author: "wentao"
+date: "2019/8/23"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# phyloseq中的edgeR差异分析
+这里我们将此处的edge R函数做一个保存，随时调用。
+
+><font size=2>Define the extension. Do not need to have anything loaded yet to do this.
+
+## 引用
+**Citations**
+
+如果你觉得这项工作对你有用，请引用：
+
+><font size=2>If you find this extension or tutorial useful in your work, please cite the following:
+
+phyloseq
+><font size=2>McMurdie and Holmes (2013) phyloseq: An R Package for Reproducible Interactive Analysis and Graphics of Microbiome Census Data. PLoS ONE 8(4):e61217
+
+edgeR
+><font size=2>Robinson MD, McCarthy DJ, Smyth GK (2009) edgeR: a Bioconductor package for differential expression analysis of digital gene expression data. Bioinformatics (Oxford, England) 26: 139–140
+
+
+
+
+导入实例并进行分析
+><font size=2>Load example data and try it out
+
+```{R}
+date()#显示当前时间
+library("phyloseq"); packageVersion("phyloseq")
+library("edgeR"); packageVersion("edgeR")
+
+```
+### 选择数据导入方式
+本次使用,这里使用的例子同DESep使用的一样，都是肿瘤微生物样本，所以这里就不进行介绍了，参见上一篇教程。
+```{R}
+filepath = system.file("extdata", "study_1457_split_library_seqs_and_mapping.zip", package = "phyloseq")
+kostic = microbio_me_qiime(filepath)
+```
+### subset_samples函数用于样品取子集
+
+DESep2会自动进行变量的过滤，但是DESep却不会，在这里我们手动过滤方差低的OTU，并将结果传递给DESep进行后续分析。
+
+><font size=2>Independent filtering is done automatically in DESeq2, but not in DESeq. Here we will filter OTUs for which the variance across all samples is very low, and we’ll do this before ever passing the data to DESeq.
+
+```{R}
+# Remove the samples for which the DIAGNOSIS was not included
+kosticB = subset_samples(kostic, DIAGNOSIS != "None")
+kosticB
+```
+
+对OTU的丰度和出现频率做一个统计
+
+```{R}
+kosticp = transform_sample_counts(kosticB, function(x){x/sum(x)})
+hist(log10(apply(otu_table(kosticp), 1, var)),
+     xlab="log10(variance)", breaks=50,
+     main="A large fraction of OTUs have very low variance")
+```
+### 过滤低丰度OTU
+在这里我们使用10-5作为阈值，选择方差大于这个阈值的OTU，请寄主这一过滤同我们接下来做的差异分析之间时独立的。样本分类信息并没有使用。
+
+
+><font size=2>Here we’ve used an arbitrary but not-unreasonable variance threshold of 10-5. It is important to keep in mind that this filtering is independent of our downstream test. The sample classifications were not used.
+
+><font size=2>Now let’s use our newly-defined function to convert the phyloseq data object kosticB into an edgeR “DGE” data object, called dge.
+
+
+```{R}
+varianceThreshold = 1e-5
+keepOTUs = names(which(apply(otu_table(kosticp), 1, var) > varianceThreshold))
+keepOTUs 
+kosticB = prune_taxa(keepOTUs, kosticB)
+kosticB
+```
+### phyloseq_to_edgeR函数需要手动加载
+这里再次注意：这个函数是作者后来写的，并没有合并到phyloseq包中，需要我们手动保存代码文件，进行source，方可使用。
+这里设置显著性阈值为0.001。
+```{R}
+source("./phyloseq_to_edgeR.R")
+dge = phyloseq_to_edgeR(kosticB, group="DIAGNOSIS")
+# Perform binary test
+et = exactTest(dge)
+# Extract values from test results
+tt = topTags(et, n=nrow(dge$table), adjust.method="BH", sort.by="PValue")
+res = tt@.Data[[1]]
+alpha = 0.001
+sigtab = res[(res$FDR < alpha), ]
+sigtab = cbind(as(sigtab, "data.frame"), as(tax_table(kosticB)[rownames(sigtab), ], "matrix"))
+dim(sigtab)
+head(sigtab)
+```
+
+```{R}
+library("ggplot2"); packageVersion("ggplot2")
+```
+### 可视化差异分析结果
+
+```{R}
+theme_set(theme_bw())
+scale_fill_discrete <- function(palname = "Set1", ...) {
+    scale_fill_brewer(palette = palname, ...)
+}
+sigtabgen = subset(sigtab, !is.na(Genus))
+# Phylum order
+x = tapply(sigtabgen$logFC, sigtabgen$Phylum, function(x) max(x))
+x = sort(x, TRUE)
+sigtabgen$Phylum = factor(as.character(sigtabgen$Phylum), levels = names(x))
+# Genus order
+x = tapply(sigtabgen$logFC, sigtabgen$Genus, function(x) max(x))
+x = sort(x, TRUE)
+sigtabgen$Genus = factor(as.character(sigtabgen$Genus), levels = names(x))
+ggplot(sigtabgen, aes(x = Genus, y = logFC, color = Phylum)) + geom_point(size=6) + 
+  theme(axis.text.x = element_text(angle = -90, hjust = 0, vjust = 0.5))
+```
+正如预期那样， Fusobacterium菌在患病和健康样本中差异很大，仔细观察发现包含 Fusobacterium的门也有差异。
+
+><font size=2>As expected from the original study abstract and title, Fusobacterium OTUs were most-significantly differentially abundant between the cancerous and healthy samples. If you look closely, two different genera of the Fusobacteria phylum were among the most significantly different, Leptotrichia (the winner) as well as Fusobacterium.
+
+
+
+### 双向检验
+**Paired tests**
+
+我们样本研究包含的是95对发病和健康的样本，每组样品都是来源于同一个患者，之前的检验虽然也是可信的，但是没有考虑到这一额外的信息，edger支持这样的检验。
+
+><font size=2>As mentioned above, the design of this experiment is 95 carcinoma/normal pairs, where each pair comes from the same patient. Although the previous tests are valid, they are conservative in that they do not use this extra information regarding the sample-pairs, and in that sense have forfeited extra power. There is support in edgeR for paired tests, and this is officially described in one of the edgeR user guides. It is also demonstrated here in the following.
+
+```{R}
+Diagnosis = get_variable(kosticB, "DIAGNOSIS")
+Patient = get_variable(kosticB, "ANONYMIZED_NAME")
+# Notice that we have some patients without one of the pairs.
+tapply(Patient, Diagnosis, length)
+```
+
+
+```{R}
+length(levels(Patient))
+any(tapply(Diagnosis, Patient, length) > 2)
+sum(tapply(Diagnosis, Patient, length) < 2)
+
+```
+
+```{R}
+# Keep only patients with both healthy and cancer samples
+keepPatients = names(which(tapply(Diagnosis, Patient, function(x){length(unique(x))}) == 2))
+kosticBpair = subset_samples(kosticB, ANONYMIZED_NAME %in% keepPatients)
+Diagnosis = get_variable(kosticBpair, "DIAGNOSIS")
+Patient = get_variable(kosticBpair, "ANONYMIZED_NAME")
+# With that accounting out of the way, define the design matrix
+design = model.matrix(~ Patient + Diagnosis)
+```
+
+### 成对检验速度是相当慢的
+必须评估离散程度，这与上面我们展示的函数不同
+
+><font size=2>Must estimate the dispersions, as always. This is different than in the function shown above.
+
+```{R}
+# Add one to protect against overflow, log(0) issues.
+x = as(otu_table(kosticBpair), "matrix") + 1L
+taxonomy = data.frame(as(tax_table(kosticBpair), "matrix"))
+# Now turn into a DGEList
+x = DGEList(counts=x, group=Diagnosis, genes=taxonomy, remove.zeros=TRUE)
+# Calculate the normalization factors and estimate dispersion
+x = calcNormFactors(x, method="RLE")
+x = estimateGLMCommonDisp(x, design)
+x = estimateGLMTrendedDisp(x, design)
+x = estimateGLMTagwiseDisp(x, design)
+```
+
+### 提取分析结果
+
+同edgeR用户指南类似，我们拟合线性模型，并评估处理的影响。注意，我们何以忽略gilLRT中的coefficient参数。因为处理的影响时模型中的最后一个参数。
+
+><font size=2>As in the edgeR User’s Guide, we proceed to fit a linear model and test for the treatment effect. Note that we can omit the coefficient argument to glmLRT because the “treatment effect” (in this case the tissue diagnosis) is the last coeffcient in the model.
+
+```{R}
+fit <- glmFit(x, design)
+lrt <- glmLRT(fit)
+topTags(lrt)
+```
+### 过滤和完善差异结果
+
+测试表明健康和发病组织中微生物的差异，接下来我们使用t-test进行进一步矫正差异分析结果。重新绘图
+
+><font size=2>This test detects OTUs that are differentially abundant in the tumor colon mucosa relative to the healthy colon mucosa (control), adjusting for baseline differences between the patients. This test can be viewed as a generalization of a paired t-test.
+
+><font size=2>Re-make the plot.
+
+```{R}
+respair = topTags(lrt, n=nrow(x), adjust.method="BH", sort.by="PValue")
+respair = respair@.Data[[1]]
+alpha = 0.001
+sigtab = respair[(respair$FDR < alpha), ]
+sigtab = cbind(as(sigtab, "data.frame"), as(tax_table(kosticB)[rownames(sigtab), ], "matrix"))
+dim(sigtab)
+head(sigtab)
+```
+### 展示差异分析结果
+
+```{R}
+sigtabgen = subset(sigtab, !is.na(Genus))
+# Phylum order
+x = tapply(sigtabgen$logFC, sigtabgen$Phylum, function(x) max(x))
+x = sort(x, TRUE)
+sigtabgen$Phylum = factor(as.character(sigtabgen$Phylum), levels = names(x))
+# Genus order
+x = tapply(sigtabgen$logFC, sigtabgen$Genus, function(x) max(x))
+x = sort(x, TRUE)
+sigtabgen$Genus = factor(as.character(sigtabgen$Genus), levels = names(x))
+ggplot(sigtabgen, aes(x = Genus, y = logFC, color = Phylum)) + geom_point(size=6) + 
+  theme(axis.text.x = element_text(angle = -90, hjust = 0, vjust = 0.5)) +
+  ggtitle("Log Fold Change of Significant OTUs in a Paired Test")
+```
+
+### 其他写斜变量的使用
+
+**Other covariates available**
+样本分组文件中有很多有意思的变量，我们可以使用sample-data和get-variable调取使用。
+As a side note, there are many other interesting patient-sample covariates available in the sample_data, which you can access with sample_data() and get_variable().
+
+```{R}
+sample_variables(kostic)
+```
+
+
+## reference
+http://joey711.github.io/phyloseq-extensions/edgeR.html
+

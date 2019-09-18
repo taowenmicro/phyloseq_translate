@@ -1,0 +1,205 @@
+---
+title: "phyloseq_H7_DESeq2 with phyloseq"
+author: "wentao"
+date: "2019/8/23"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+# phyloseq中的DESeq2 差异分析
+
+这也是phyloseq中推荐的差异分析方法：
+
+DEsep在phyloseq包中有正式的扩展和相应的介绍。phyloseq_to_deseq2函数在导入phyloseq包时就可以使用了，无需额外加载。
+
+
+><font size=2>DESeq2 has an official extension within the phyloseq package and an accompanying vignette. The vignette has been copied/included here for continuity, and as you can see, phyloseq_to_deseq2 does not need to be defined before using it because it is already available when you load phyloseq.
+
+
+## 关于引用
+**Citations**
+
+如果你觉得下面的教程帮助到了你，请参考一下的引用。
+
+### 不同丰度的微生物数据
+**Differential Abundance for Microbiome Data**
+
+><font size=2>McMurdie and Holmes (2014) Waste Not, Want Not: Why Rarefying Microbiome Data is Inadmissible. PLoS Computational Biology in press
+
+### phyloseq
+><font size=2>McMurdie and Holmes (2013) phyloseq: An R Package for Reproducible Interactive Analysis and Graphics of Microbiome Census Data. PLoS ONE. 8(4):e61217
+
+### DESeq2
+><font size=2>Love MI, Huber W, Anders S (2014) Moderated estimation of fold change and dispersion for RNA-seq data with DESeq2. Genome Biology 15(12): 550
+
+
+准备数据：
+在本例子中我们使用的数据是研究直肠癌症公开的数据。
+
+><font size=2>Background on the data
+><font size=2>In this example I use the publicly available data from a study on colorectal cancer:
+Genomic analysis identifies association of Fusobacterium with colorectal carcinoma. Kostic, A. D., Gevers, D., Pedamallu, C. S., Michaud, M., Duke, F., Earl, A. M., et al. (2012). Genome research, 22(2), 292-298.
+
+补充的是，这项研究是在基因组研究之前发表的。这里还有另外一份相似的研究（长期重复观测结果）:Fusobacterium nucleatum感染结肠癌中很常见，如果你有这个案例有兴趣。但是我们并没有采用这份数据，处于多个考虑我们最终使用的是 microbio.me/qiime 服务器上的第一份数据
+
+Qiita中的项目编号：1457；
+
+研究摘要：
+
+
+
+><font size=2>As a side-note, this work was published ahead of print in Genome Research alongside a highly-related article from a separate group of researchers (long-live reproducible observations!): Fusobacterium nucleatum infection is prevalent in human colorectal carcinoma. In case you are interested. For the purposes of example, however, we will stick to the data from the former study, with data available at the microbio.me/qiime server.
+
+><font size=2>Study ID: 1457
+
+><font size=2>Project Name: Kostic_colorectal_cancer_fusobacterium
+
+研究摘要：
+
+肿瘤微环境是由基因组改变的癌症细胞，非癌症细胞和微生物群落共同组成的复杂群落。这些成分可能每种都会促进癌症。然而，微生物群落的作用是目前所知最少的。我们使用宏基因组测序对9对正常和患病微生物群落进行测定。癌症组织中Fusobacterium序列大量富集，同时在16S测序分析中也发现了相同的规律。酸杆菌门和厚壁菌门在癌症组织中下降。这一发现揭示了肿瘤中微生物群落的变化，但是对于Fusobacteria在结肠癌发病机制中的作用需要进一步研究。
+
+><font size=2>Study Abstract: The tumor microenvironment of colorectal carcinoma is a complex community of genomically altered cancer cells, nonneoplastic cells, and a diverse collection of microorganisms. Each of these components may contribute to carcino genesis; however, the role of the microbiota is the least well understood. We have characterized the composition of the microbiota in colorectal carcinoma using whole genome sequences from nine tumor/normal pairs. Fusobacterium sequences were enriched in carcinomas, confirmed by quantitative PCR and 16S rDNA sequence analysis of 95 carcinoma/normal DNA pairs, while the Bacteroidetes and Firmicutes phyla were depleted in tumors. Fusobacteria were also visualized within colorectal tumors using FISH. These findings reveal alterations in the colorectal cancer microbiota; however, the precise role of Fusobacteria in colorectal carcinoma pathogenesis requires further investigation.
+
+### 导入数据转化为DESeq2
+**Import data with phyloseq, convert to DESeq2**
+
+```{R}
+library("phyloseq"); packageVersion("phyloseq")
+
+```
+导入数据
+```{R}
+filepath = system.file("extdata", "study_1457_split_library_seqs_and_mapping.zip", package="phyloseq")
+kostic = microbio_me_qiime(filepath)
+kostic
+```
+#### 可选，本次不需要
+```{R eval=FALSE, include=FALSE}
+filepath = "~/Downloads/study_1457_split_library_seqs_and_mapping.zip"
+kostic = microbio_me_qiime(filepath)
+kostic
+
+kostic = microbio_me_qiime(1457)
+kostic
+```
+`
+###转化DESeq2数据格式
+**Convert to DESeq2's DESeqDataSet class**
+
+在这个例子中，我们使用DIAGNOSIS作为分组变量。这项研究的重点在于区分发病和健康的微生物群落，所以挑选这个分组变量是有意义的。对于我们自己的数据，可以进行更复杂的分组，设置是多个分组，如果这对你的试验有重要意义的话。如果当前表格中并没有可以代表你样品分组的变量列，可能你还需要添加新的分组。详细参见DESeq2主页。
+
+下面使我们使用的数据kostic，我们简要展示分组文件信息。
+
+><font size=2>In this example I'm using the major sample covariate, DIAGNOSIS, as the study design factor. The focus of this study was to compare the microbiomes of pairs of healthy and cancerous tissues, so this makes sense. Your study could have a more complex or nested design, and you should think carefully about the study design formula, because this is critical to the test results and their meaning. You might even need to define a new factor if none of the variables in your current table appropriately represent your study's design. See the DESeq2 home page for more details.
+
+><font size=2>Here is the summary of the data variable kostic that we are about to use, as well as the first few entries of the DIAGNOSIS factor.
+
+subset_samplesh函数，对样品取子集，去除DIAGNOSIS为Nona的样本。
+
+
+><font size=2>Unfortunately, the diagnosis variable has a third placeholder class indicating that no diagnosis was given ("None"). For the purposes of testing, these samples will be removed.
+
+```{R}
+kostic = subset_samples(kostic, DIAGNOSIS != "None")
+kostic
+head(sample_data(kostic)$DIAGNOSIS, 25)
+```
+
+### 导入DESeq2包
+
+
+```{R}
+library("DESeq2")
+packageVersion("DESeq2")
+```
+### 这个地方官网教程出现错误
+github上讨论过这个问题，地址：https://github.com/joey711/phyloseq/issues/387
+
+下面这两行试剂上就完成了DESeq2的全部工作；
+phyloseq_to_deseq2函数可以将phyloseq格式的微生物组数据转化为DESeq2需要的格式，然后DESea完成剩下的差异分析工作。在本例子中我们使用的默认的参数进行分析，但是我们实际上可以修改。
+
+很遗憾，作者这里d额数据似乎需要转化，由于log转化出现问题，所以我们做了相应的代码修改。（具体就这个问题的讨论在githu上面的地址，我们也会在教程结束后就主要的报错及其问题总结一份教程。）
+
+><font size=2>The following two lines actually do all the complicated DESeq2 work. The function phyloseq_to_deseq2 converts your phyloseq-format microbiome data into a DESeqDataSet with dispersions estimated, using the experimental design formula, also shown (the ~DIAGNOSIS term). The DESeq function does the rest of the testing, in this case with default testing framework, but you can actually use alternatives.
+
+
+```{R eval=FALSE, include=FALSE}
+
+diagdds = phyloseq_to_deseq2(kostic, ~ DIAGNOSIS)
+diagdds = DESeq(diagdds, test="Wald", fitType="parametric")
+```
+### 更正代码
+这里将讨论的结果更换源代码，正确操作。
+```{R}
+
+gm_mean = function(x, na.rm=TRUE){
+  exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
+}
+
+
+diagdds = phyloseq_to_deseq2(kostic, ~ DIAGNOSIS)
+# calculate geometric means prior to estimate size factors
+gm_mean = function(x, na.rm=TRUE){
+  exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
+}
+geoMeans = apply(counts(diagdds), 1, gm_mean)
+diagdds = estimateSizeFactors(diagdds, geoMeans = geoMeans)
+diagdds = DESeq(diagdds, fitType="local")
+
+diagdds = DESeq(diagdds, test="Wald", fitType="parametric")
+```
+
+m默认的多重比较实用的是Benjamini-Hochberg方法。
+
+><font size=2>Note: The default multiple-inference correction is Benjamini-Hochberg, and occurs within the DESeq function.
+
+
+
+### 提取差异分析结果
+**Investigate test results table**
+
+res为提取差异分析结果，alpha用于设定显著性阈值，将全部显著的OTU挑选出来后合并注释信息进行结果汇总。然后我们按照显著性对结果进行排序，并且去掉NA值。
+
+
+><font size=2>The following results function call creates a table of the results of the tests. Very fast. The hard work was already stored with the rest of the DESeq2-related data in our latest version of the diagdds object (see above). I then order by the adjusted p-value, removing the entries with an NA value. The rest of this example is just formatting the results table with taxonomic information for nice(ish) display in the HTML output.
+
+
+```{R}
+res = results(diagdds, cooksCutoff = FALSE)
+alpha = 0.01
+sigtab = res[which(res$padj < alpha), ]
+sigtab = cbind(as(sigtab, "data.frame"), as(tax_table(kostic)[rownames(sigtab), ], "matrix"))
+head(sigtab)
+dim(sigtab)
+```
+
+### 仅仅有四个差异物种，这里使用差异倍数出图
+让我们看看在两个组织中显著性差异的OTU。使用ggplot出图
+
+><font size=2>Let's look at the OTUs that were significantly different between the two tissues. The following makes a nice ggplot2 summary of the results.
+
+```{R}
+library("ggplot2")
+theme_set(theme_bw())
+scale_fill_discrete <- function(palname = "Set1", ...) {
+    scale_fill_brewer(palette = palname, ...)
+}
+# Phylum order
+x = tapply(sigtab$log2FoldChange, sigtab$Phylum, function(x) max(x))
+x = sort(x, TRUE)
+sigtab$Phylum = factor(as.character(sigtab$Phylum), levels=names(x))
+# Genus order
+x = tapply(sigtab$log2FoldChange, sigtab$Genus, function(x) max(x))
+x = sort(x, TRUE)
+sigtab$Genus = factor(as.character(sigtab$Genus), levels=names(x))
+ggplot(sigtab, aes(x=Genus, y=log2FoldChange, color=Phylum)) + geom_point(size=6) + 
+  theme(axis.text.x = element_text(angle = -90, hjust = 0, vjust=0.5))
+```
+
+
+
+
+### reference
+http://joey711.github.io/phyloseq-extensions/DESeq2.html

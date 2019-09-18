@@ -1,0 +1,443 @@
+---
+title: 'phyloseq_H3_Powerful tree graphics with ggplot2'
+author: "wentao"
+date: "2019年5月16日"
+output: html_document
+---
+  
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE
+)
+
+
+```
+# 强大的phyloseq进化树可视化功能
+**Powerful tree graphics with ggplot2**
+
+本教程使用plot_tree函数演示一个已经在phyloseq中构建好的树文件可视化的案例，这个函数强大的绘图神器ggplot2.
+
+译者补充：phyloseq使用plot_tree函数可视化进化树
+
+><font size=2>This page demos already-constructed examples of phylogenetic trees created via the plot_tree function in the phyloseq package, which in-turn uses the powerful graphics package called ggplot2
+
+
+
+
+###载入包和数据集
+
+**Load the package and datasets**
+
+```{r data, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+library("phyloseq")
+packageVersion("phyloseq")
+library("ggplot2"); packageVersion("ggplot2")
+data("esophagus")
+data("GlobalPatterns")
+```
+
+### 例子
+**Example**
+我们想要可视化进化树，有时候甚至展示bootstrap值，但是GlobalPatterns数据集中树的节点标签有点奇怪，像是一个bootstrap值，但是有时候还有两位小数。
+
+译者补充：
+
+- 修改进化树，做微生物多样性分析过程中，基于进化树的修改，尤其是在做完进化树之后，做的不多。这里也算是给我科普科普如何操作.
+- BOOTSTRAP值即自展值，可用来检验所计算的进化树分支可信度。Bootstrap几乎是构建系统进化树一个必须的选项。一般Bootstrap的值>70%，则认为构建的进化树较为可靠。如果Bootstrap的值太低，则有可能进化树的拓扑结构有错误，进化树是不可靠的。默认显示boot值，按照样品数量显示丰度圆点。
+
+><font size=2>We want to plot trees, sometimes even bootstrap values, but notice that the node labels in the GlobalPatterns dataset are actually a bit strange. They look like they might be bootstrap values, but they sometimes have two decimals.
+
+
+。
+
+修改这里将标签更改为使用前四个字符
+```{r label, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+head(phy_tree(GlobalPatterns)$node.label, 10)
+#
+phy_tree(GlobalPatterns)$node.label = substr(phy_tree(GlobalPatterns)$node.label, 1, 4)
+```
+
+### 为了得到更好的展示效果，对OTU进行过滤
+
+很好，现在我们的节点标签更像是一个bootstrap值了，我们可以使用这一值和其他信息共同映射到图形上。
+GlobalPatterns数据集又很多的OTU，比我们想要使用树去展示的OTU还多。所以，这里我们选择GlobalPatterns数据集中的前50个OTU，并将其也储存为phylosep对象
+
+译者补充：为什么一般扩增子群落分析都不去展示进化树，一方面对于问题的解释没有什么实际意义，另外一个群落中OTU数量往往大几百个或者几千个，这远远超过我们可以通过进化树读取信息的能力了。
+
+><font size=2>Great, now that we’re more happy with the node labels at least looking like bootstrap values, we can move on to using these along with other information about data mapped onto the tree graphic.The GlobalPatterns dataset has many OTUs, more than we would want to try to fit on a tree graphic
+So, let’s arbitrarily prune to just the first 50 OTUs in GlobalPatterns, and store this as physeq, which also happens to be the name for most main data parameters of function in the phyloseq package.
+
+```{r sub tax, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+ntaxa(GlobalPatterns)
+physeq = prune_taxa(taxa_names(GlobalPatterns)[1:50], GlobalPatterns)
+physeq
+```
+
+现在，让我们看看使用plot_tree函数的默认选项究竟发生了什么。
+
+><font size=2>Now let’s look at what happens with the default plot_tree settings.
+
+```{R}
+plot_tree(physeq)
+```
+叶节点后面的原点代表了每个样本在这个节点上的OTU，用于观察每个样品中的OTU，是否有些样本中该OTU是否又差异。但是，在默认情况下，这些点添加到叶节点的旁边不做任何变化。
+
+如果我们仅仅想看进化树，而不需要这些代表样品的点呢？treeonlyc参数帮我们达到目的。
+
+><font size=2>dots are annotated next to tips (OTUs) in the tree, one for each sample in which that OTU was observed. Some have more dots than others. Also by default, the node labels that were stored in the tree were added next to each node without any processing (although we had trimmed their length to 4 characters in the previous step).
+
+><font size=2>What if we want to just see the tree with no sample points next to the tips?
+
+
+```{R}
+plot_tree(physeq, "treeonly")
+
+```
+
+或许我们也不想要枝节点的标签。
+
+><font size=2>without the node labels either?
+
+
+```{R}
+plot_tree(physeq, "treeonly", nodeplotblank)
+```
+ladderize参数可以调节树的展示方式，让图形更加好看。
+
+><font size=2>We can adjust the way branches are rotated to make it look nicer using the ladderize parameter.
+
+
+```{R}
+plot_tree(physeq, "treeonly", nodeplotblank, ladderize="left")
+```
+
+```{R}
+plot_tree(physeq, "treeonly", nodeplotblank, ladderize=TRUE)
+```
+
+在这堆点后面添加注释信息，这里添加OTU编号
+
+><font size=2>want to add the OTU labels next to each tip?
+
+
+```{R}
+plot_tree(physeq, nodelabf=nodeplotblank, label.tips="taxa_names", ladderize="left")
+```
+
+
+method参数除了 默认参数sampledodge之外，其他参数都不会展示样品点。下面是其另外一个参数anythingelse.
+
+><font size=2>Any method parameter argument other than "sampledodge" (the default) will not add dodged sample points next to the tips.
+
+
+```{R}
+# ?plot_tree
+plot_tree(physeq, "anythingelse")
+```
+
+
+
+### 映射变量到进化树中
+**Mapping Variables in Data**
+
+在默认的选项中sampledodge，会在叶节点添加每个样品点，这在默认情况想下是黑色的，但是我们可以使用不同的变量给这些点映射美学特征。
+
+><font size=2>In the default argument to method, "sampledodge", a point is added next to each OTU tip in the tree for every sample in which that OTU was observed. We can then map certain aesthetic features of these points to variables in our data.
+
+### 颜色
+**color**
+
+颜色是最有用的美学特征之一，可以映射为样品或者物种分类信息，例如，我们现在将样品点的颜色映射为样品分组信息
+
+><font size=2>Color is one of the most useful aesthetics in tree graphics when they are complicated. Color can be mapped to either taxonomic ranks or sample covariates. For instance, we can map color to the type of sample collected (environmental location).
+
+
+使用颜色将黑点区分开样品
+color参数：指定进化树汇总丰度信息按照分组上色
+
+
+```{r 使用颜色将黑点区分开样品, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+# library(phyloseq)
+plot_tree(physeq, nodelabf=nodeplotboot(), ladderize="left", color="SampleType")
+```
+
+按照物种注释对节点进行上色
+
+><font size=2>alternatively map color to taxonomic class.
+
+
+```{r 按照注释对节点进行上色, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+plot_tree(physeq, nodelabf=nodeplotboot(), ladderize="left", color="Class")
+```
+
+
+### 形状代表OTU不同注释 颜色代表不同样品
+**Shape**
+
+如果变量少于6个，我们也可以将其映射为形状，当然也可以同时映射为颜色和形状。在这里，我们使用分类信息作为形状的映射。同时映射颜色为分组信息。
+
+
+译者补充：关于支节点标签设置使用参数nodelabf，有三个选项
+nodeplotdefault（全部添加）
+
+nodeplotboot（设置范围部分添加）：设置添加在节点上的最高的最低boot值。
+
+nodeplotblank（不添加）
+
+><font size=2>You can also map a variable to point shape if it has 6 or fewer categories, and this can be done even when color is also mapped. Here we map shape to taxonomic class so that we can still indicate it in the graphic while also mapping SampleType to point color.
+
+```{r 形状代表OTU不同注释 颜色代表不同样品, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+plot_tree(physeq, nodelabf=nodeplotboot(100,80), ladderize="left", color="SampleType", shape="Class")
+```
+### 节点标签
+**Node labels**
+
+在大多数情况下对节点添加标签都是一个置信度的指标，往往是bootstrap值。一下图形显示了执行这一操作的方法，默认情况会显示节点标签。
+
+><font size=2>One of the most common reasons to label nodes is to add confidence measures, often a bootstrap value, to the nodes of the tree. The following graphics show different ways of doing this (labels are added by default if present in your tree).
+
+
+```{r 两种策略处理进化树分支置信度, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+# The default
+plot_tree(physeq, color="SampleType", ladderize="left")
+```
+
+nodeplotboot()参数： 默认添加50-95的boot值
+
+```{r Special bootstrap label, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+# Special bootstrap label
+plot_tree(physeq, nodelabf=nodeplotboot(), color="SampleType", ladderize="left")
+```
+
+nodeplotboot:设定范围(80,0,3)
+
+```{r 设定范围, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+# Special bootstrap label with alternative thresholds
+plot_tree(physeq, nodelabf=nodeplotboot(80,0,3), color="SampleType", ladderize="left")
+```
+
+
+### 叶节点标签
+**Tip labels**
+
+- label.tips参数：用于控制树的叶节点，默认是NULL。表示不设置标签。我们可以使用OTU名称添加为标签，如果我们的tax注释文件中有多个不同等级的注释文件，则可以随意添加一个为叶节点标签。
+
+- text.size参数是一个正数，用来指定标签的大小，默认是NULL，如果这个参数为NULL，则会自动计算一个认为最适合标签的大小。这个参数一般不做调节，但是如果我们想更改标签大小的时候可以用于修改。label.tips 是NULL的时候，这个参数就没有意义了。
+
+><font size=2>label.tips - The label.tips parameter controls labeling of tree tips (AKA leaves). Default is NULL, indicating that no tip labels will be printed. If "taxa_names" is a special argument resulting in the OTU name (try taxa_names function) being labelled next to the leaves or next to the set of points that label the leaves. Alternatively, if your data object contains a tax_table, then one of the rank names (from rank_names(physeq)) can be provided, and the classification of each OTU at that rank will be labeled instead.
+><font size=2>text.size - A positive numeric argument indicating the ggplot2 size parameter for the taxa labels. Default is NULL. If left as NULL, this function will automatically calculate a (hopefully) optimal text size given the size constraints posed by the tree itself (for a vertical tree). This argument is included mainly in case the automatically-calculated size is wrong and you want to change it. Note that this parameter is only meaningful if label.tips is not NULL
+
+```{R}
+plot_tree(physeq, nodelabf=nodeplotboot(80,0,3), color="SampleType", label.tips="taxa_names", ladderize="left")
+
+```
+
+
+
+### 更改展示类型为目前比较流行的圈图
+**Radial Tree**
+
+使用ggplot2可以轻松绘制圈图，只需要更换为极坐标系。
+
+><font size=2>Making a radial tree is easy with ggplot2, simply recognizing that our vertically-oriented tree is a cartesian mapping of the data to a graphic – and that a radial tree is the same mapping, but with polar coordinates instead.
+
+```{r 更改展示类型, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+data(esophagus)
+plot_tree(esophagus, color="Sample", ladderize="left") + coord_polar(theta="y")
+```
+### 这里添加OTU标签，发现是水平的
+
+GlobalPatterns数据集中包含有许多额外信息，我们使用同上面相同的信息添加到图形中。
+
+><font size=2>The GlobalPatterns dataset has additional data we can map, so we will re-do some preliminary data loading/trimming to make this radial-tree example self contained, and then show the same plot as above.
+
+```{r 叶节点标签, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+plot_tree(physeq , nodelabf=nodeplotblank,  color="SampleType", label.tips="taxa_names", ladderize="left") + coord_polar(theta="y") 
+```
+
+### esophagus数据集
+**The esophagus dataset.**
+这是一个把包含OTU表格和进化树的phyloseq数据集。这个数据集是一个标准的小数据集。没有包含样本信息数据，由于早期采样和测序成本问题，所以OTU数量和序列数较少，正好我们用来可视化进化树。
+
+注意在没有任何设置参数时，进化树叶节点右侧的点均为没有大小的黑点。代表了在每个样本中该OTU的数量信息。这一展示进化树中的OTU这个概念十分模糊，因为可以展示不仅仅是OTU水平的进化树，你可以展示任何一个分类等级的进化树。
+
+
+><font size=2>A simple dataset containing tree and OTU-table components.
+
+><font size=2>The esophagus is a small and relatively simple dataset by moderns standards. It only contains 3 samples, no sample-data, and a modest quantity of total sequencing per sample that is a relic of an earlier time when resources for this sort of investigation were sparse and sequencing was expensive. Nevertheless, it makes for a nice sized dataset to start displaying trees. (For more details about the dataset and its origin, try entering ?esophagus into the command-line once you have loaded the phyloseq package)
+
+><font size=2>The default tree without any additional parameters is plot with black points that indicate in how many different samples each OTU was found. In this case, the term “OTU” is used quite loosely (it is a loose term, after all) to mean entries in the taxononmic data you are plotting; and in the specific case of trees, it means the tips, even if you have already agglomerated the data such that each tip is equivalent to a rank of class or phylum.
+
+
+```{R}
+plot_tree(esophagus, title="Default tree.")
+```
+
+如果出于某些原因，你想要展示未添加修饰的进化树，可以选择treeonly参数，z和仅仅展示最为精简的进化树，并且运算速度会快很多.这仍然是一个ggplot对象。
+
+><font size=2>If for some reason you just want an unadorned tree, the "treeonly" method can be selected. This tends to plot much faster than the annotated tree, and is still a ggplot2 object that you might be able to add further layers to manually.
+
+
+```{R}
+plot_tree(esophagus, "treeonly", title="method = \"treeonly\"")
+
+```
+在叶节点右侧添加代表样品点的OTU，按照样品上色。
+
+><font size=2>Now let’s shade tips according to the sample in which a particular OTU was observed.
+
+```{R}
+plot_tree(esophagus, color="samples")
+```
+
+我们可以根据OTU在样品中的丰度对点及逆行大小的设置。点大小通常和序列数量有关，但是也取决于你做的标准化方式。
+
+><font size=2>We can also scale the size of tips according to abundance; usually related to number of sequencing reads, but depends on what you have done with the data prior to this step.
+
+```{R}
+plot_tree(esophagus, size="abundance")
+```
+颜色和大小同时映射在点上。
+
+><font size=2>Both graphical features included at once.
+
+```{R}
+plot_tree(esophagus, size="abundance", color="samples")
+```
+
+我们发现有些点重叠，这里设置间隔，将点分开。
+
+><font size=2>There is some overlap of the tip points. Let’s adjust the base spacing to spread them out a little bit.
+
+
+```{R}
+plot_tree(esophagus, size="abundance", color="samples", base.spacing=0.03)
+```
+
+如果我们希望OTU丰度大于3时，显示该OTU丰度，便可以设置min.abundance参数，默认不添加任何标签。
+
+><font size=2>Good, now what if we wanted to also display the specific numeric value of OTU abundances that occurred more than 3 times in a given sample? For that, plot_tree includes the min.abundance parameter, set to Inf by default to prevent any point labels from being written.
+
+```{R}
+plot_tree(esophagus, size="abundance", color="samples", base.spacing=0.03, min.abundance=3)
+```
+
+### 更多的例子
+**More Examples with the Global Patterns dataset**
+
+我们对GlobalPatterns数据取子集，选择 Kingdom为古菌的数据。通过下面查看OTU数量我们可以看到gpa只有208个OTU。但是GlobalPatterns有超过19000个OTU，过多的OTU对使得进化树无法有很好的展示尺寸和字体大小。对GlobalPatterns展示进化树可能不是一个好的选择。
+
+><font size=2>Subset Global Patterns dataset to just the observed Archaea.
+
+><font size=2>That is to say, it is reasonable to consider displaying the phylogenetic tree directly for gpa. Too many OTUs means a tree that is pointless to attempt to display in its entirety in one graphic of a standard size and font. So the whole GlobalPatterns dataset probably a bad idea.
+
+```{R}
+gpa <- subset_taxa(GlobalPatterns, Kingdom=="Archaea")
+ntaxa(gpa)
+
+ntaxa(GlobalPatterns)
+```
+
+
+
+最少的参数可视化展示相对完整的信息
+
+><font size=2>Some patterns are immediately discernable with minimal parameter choices:
+
+```{R}
+plot_tree(gpa, color="SampleType")
+```
+
+按照门水平的注释进行上色
+
+```{R}
+plot_tree(gpa, color="Phylum")
+
+```
+同时展示样品分类信息和门水平注释信息。
+
+```{R}
+plot_tree(gpa, color="SampleType", shape="Phylum")
+```
+label.tip展示标签，这里展示属水平标签。
+
+```{R}
+plot_tree(gpa, color="Phylum", label.tips="Genus")
+```
+
+我们可以看到标签的大小和我们进化树汇总展示的OTU数量有关，这200余个OTU任然展示了比较拥挤的标签。
+
+所以接下来让我们进一步选择门水平注释为Crenarchaeota的OTUj进行展示。
+
+><font size=2>However, the text-label size scales with number of taxa, and with common graphics-divice sizes/resolutions, these ~200 taxa still make for a somewhat crowded graphic.
+
+><font size=2>Let’s instead subset further to just the Crenarchaeota
+
+```{R}
+gpac <- subset_taxa(gpa, Phylum=="Crenarchaeota")
+plot_tree(gpac, color="SampleType", shape="Genus")
+```
+
+
+```{R}
+plot_tree(gpac, color="SampleType", label.tips="Genus")
+```
+
+下面让我们添加一些丰富的信息，请注意我们将OTU的丰度映射到点的大小上，所以点之间的空间就变得拥挤。
+
+><font size=2>Let’s add some abundance information. Notice that the default spacing gets a little crowded when we map taxa-abundance to point-size:
+
+```{R}
+plot_tree(gpac, color="SampleType", shape="Genus", size="abundance", plot.margin=0.4)
+```
+
+我们使用参数将其稍微展开一点，我们取消标签。
+
+><font size=2>So let’s spread it out a little bit with the base.spacing parameter, and while we’re at it, let’s call off the node labels…
+
+```{R}
+plot_tree(gpac, nodelabf=nodeplotblank, color="SampleType", shape="Genus", size="abundance", base.spacing=0.04, plot.margin=0.4)
+```
+### 门注释为Chlamydiae树展示
+**Chlamydiae-only tree**
+
+```{R}
+GP.chl <- subset_taxa(GlobalPatterns, Phylum=="Chlamydiae")
+plot_tree(GP.chl, color="SampleType", shape="Family", label.tips="Genus", size="abundance", plot.margin=0.6)
+```
+
+
+## reference
+
+https://joey711.github.io/phyloseq/plot_richness-examples.html
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,174 @@
+---
+title: "phyloseq_H2_Alpha diversity graphics"
+author: "wentao"
+date: "2019/8/23"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## alpha多样性
+**Alpha diversity graphics**
+plot_richness函数的例子。
+richness是alpha多样性的一个指标，这里也封装到phyloseq中了，这个指标往往表示OTU或者物种或者某个分类等级的总数，而不是观测到的或者评估的。在将来我们会修改这个名字防止多样性指标之间的混淆。
+
+
+><font size=2>Examples using the plot_richness function.
+
+><font size=2>Although the function name includes the word richness, which usually refers to the total number of species/OTUs/taxa in a sample or environment – either observed or estimated – this is actually a wrapper for all descriptions of alpha diversity. The name of this function may be changed in future versions to reflect this and avoid confusion.
+
+### 
+**Load packages, set parameters**
+
+
+><font size=2>As usual, we must start by loading the phyloseq package, and then the dataset, in this case "GlobalPatterns".
+
+
+```{R}
+library("phyloseq"); packageVersion("phyloseq")
+data("GlobalPatterns")
+library("ggplot2"); packageVersion("ggplot2")
+data(GlobalPatterns)
+```
+
+### 设定默认主题和颜色填充函数
+
+设定默认主题在首次载入ggplot2包的时候。
+><font size=2>Some ggplot2 theming. First load the ggplot2 package.
+
+```{R}
+theme_set(theme_bw())
+pal = "Set1"
+scale_colour_discrete <-  function(palname=pal, ...){
+  scale_colour_brewer(palette=palname, ...)
+}
+scale_fill_discrete <-  function(palname=pal, ...){
+  scale_fill_brewer(palette=palname, ...)
+}
+```
+
+### 准备数据
+**Prepare data**
+由于我们队alpha感兴趣，所以这里去除在任何样品中都不存在的OTU。（由于未知的原因，在GlobalPatterns数据集含有少量的这种OTU），但是别过滤再多了。我知道你十分想要去除单克隆，或者只有两条的序列，但是在评估alpha多样性的过程中尽量不要这样做，如果你想要得到准确的多样性估计的话。
+
+><font size=2>Since we are interested in alpha diversity, it is probably not a bad idea to prune OTUs that are not present in any of the samples (for some reason there are a few in "GlobalPatterns") – BUT DON’T TRIM MORE THAN THAT! I know it is tempting to trim noise right away, but many richness estimates are modeled on singletons and doubletons in the abundance data. You need to leave them in the dataset if you want a meaningful estimate.
+
+译者补充：过滤数据，这里官网命令尚未更新，译者做一个修改
+
+```{R}
+# GP <- prune_species(speciesSums(GlobalPatterns) > 0, GlobalPatterns)
+GP <- prune_taxa(taxa_sums(GlobalPatterns) > 0, GlobalPatterns)
+GP
+```
+## 
+**Plot Examples**
+
+这里计算6种丰富度指标，都是常见的alpha指标，默认全部出图。
+
+><font size=2>Here is the default graphic produced by the plot_richness function on the GP example dataset:
+
+
+
+```{R}
+plot_richness(GP)
+```
+
+注意在上面的例子中，会出现Fisher计算的警告信息，但仍然会画出图表。我们可以添加参数来避免这种情况出现，下面选择合适的alphja多样性指标出图。
+
+译者补充：指定出图指标，这里选择Chao1和Shannon指数
+
+><font size=2>Note that in this case, the Fisher calculation results in a warning (but still plots). We can avoid this by specifying a measures argument to plot_richness, which will include just the alpha-diversity measures that we want.
+
+
+```{R}
+plot_richness(GP, measures=c("Chao1", "Shannon"))
+```
+
+指定按照横坐标为分组信息，默认按照样品展示多样性。一个具有意义的试验分组对我们来讲是一个不错的选择。在本例子中，SampleType在这里比我们直接使用样品名展示要好得多。
+
+><font size=2>We can specify a sample variable on which to group/organize samples along the horizontal (x) axis. An experimentally meaningful categorical variable is usually a good choice – in this case, the "SampleType" variable works much better than attempting to interpret the sample names directly (as in the previous plot):
+
+
+```{R}
+plot_richness(GP, x="SampleType", measures=c("Chao1", "Shannon"))
+```
+
+如果我们想使用GP数据集中没有的分组作为X轴坐标来展示alpha多样性。例如：我们使用一个是否与人类相关的样品分组来区分全部样品。首先让我们来构造这样一组变量。
+
+><font size=2>Now suppose we wanted to use an external variable in the plot that isn’t in the GP dataset already – for example, a logical that indicated whether or not the samples are human-associated. First, define this new variable, human, as a factor (other vectors could also work; or other data you might have describing the samples).
+
+### mapping文件添加列内容拟作为新的分组,展示多样性
+
+
+```{R}
+  # library("phyloseq")
+# sampleData(GP)$human <- getVariable(GP, "SampleType") %in% c("Feces", "Mock", "Skin", "Tongue")
+sample_data(GP)$human <- getVariable(GP, "SampleType") %in% c("Feces", "Mock", "Skin", "Tongue")
+sample_data(GP)$human
+
+plot_richness(GP, x="human", color="SampleType", measures=c("Chao1", "Shannon"))
+```
+
+我们也可以按照分组合并样品，使用ggplot把样品点画大一些，首先我们来合并样品。然后我们可视化这个合并的phyloseq对象，将出图结果储存在p中。然后在进行修改。
+
+
+><font size=2>We can merge samples that are from the environment (SampleType), and make the points bigger with a ggplot2 layer. First, merge the samples.
+Now we can plot this environment-merged version of the data. First store the default ggplot graphic as p, then add an additional geom_point layer with a large size and slight transparency.
+
+```{R}
+# 按照指定分组列合并OTU表格。默认取均值合并。
+GPst = merge_samples(GP, "SampleType")
+# 添加两列作为出图的分组文件。
+sample_data(GPst)$SampleType <- factor(sample_names(GPst))
+sample_data(GPst)$human <- as.logical(sample_data(GPst)$human)
+
+p = plot_richness(GPst, x="human", color="SampleType", measures=c("Chao1", "Shannon"))
+p + geom_point(size=5, alpha=0.7)
+```
+
+
+### ggplot出图的更多细节
+**More details about ggplot2**
+
+p$layers函数查看图形底层映射关系
+本教程出图十分简易，意味着严格和高度的封装如果想要查看图形的映射信息，可以使用下面函数。为什么做这个呢？我们可以看到在我们使用geom_point添加额外的点时，
+图形原来的点并未消失，因为这是第一图层，这一现象影响我们的可视化工作。好消息是这一工作可以使用list形式的p$layers来解决。
+
+首先，让我们检查一下存储在p中的lists中的图形对象。
+
+
+
+><font size=2>For those interested in why this works so concisely (p + geom_point(size=4, alpha=0.7)), it is because the rest of the aesthetic mapping and data are contained in the ggplot object, p, and so is inherited in the call to the ggplot2 geometric object layer function, geom_point, by default since we didn’t specify alternative aes or data arguments. Although we could have if we wanted to. This perhaps sounds more confusing than it is, and I find it easier to understand by inspecting the examples I’ve shown here.
+
+><font size=2>You’ll also notice that the original smaller points are still on the plot. This is because they were the first layer, and our larger points are semi-transparent. I find this kind of distracting, and doesn’t add any information or clarity. The good news is that layers can be removed from a ggplot object with standard list notation (using the dollar sign $).
+
+><font size=2>First, check which lists are present in p.
+
+```{R}
+p$layers
+```
+
+### 去除第一个图层，因为这些点太小。
+
+我们看到第一个图层中是原来的样品点，点比较小。w哦们可以使用负索引删除这个图层，然后添加新的点比较大的图形。
+
+><font size=2>We can see that the first layer is the one specifying the original points, which are small. We can use negative indexing to “pop” it out, then add a new geom_point layer with larger point size (the following two lines).
+
+```{R}
+p$layers <- p$layers[-1]
+p + geom_point(size=5, alpha=0.7)
+```
+
+### 后记
+本教程提供alpha的分析和出图，并提供了出图模式的修改。这似乎足够了，但是就alpha的算法而言，phyloseq包含的却不像计算群落距离算法一样那么多。
+这里我们可以借鉴microbiome包进行补充，之后的高级教程中我们会做这部分工作。
+- microbiome提供超过30中alpha多样性分指标，囊括指示物种，支配物种，稀有物种，目前火热但是之前我们很少计算的指标。
+
+
+## reference
+
+https://joey711.github.io/phyloseq/plot_richness-examples.html
+
+

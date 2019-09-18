@@ -1,0 +1,324 @@
+---
+title: "phyloseq_H1_Ordination Plots"
+author: "wentao"
+date: "2019年5月16日"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+```
+
+# 排序出图
+**Ordination Plots**
+
+排序函数plot_ordination为本本教程使用核心代码，以来distance和ordinate函数，使用？查看相关函数的帮助文件。
+
+此外，phyloseq包提供了一个方便的功能函数，subset_ord_plot函数，可以从排序结果中挑选点出图。具体教程地址：http://joey711.github.io/phyloseq/subset_ord_plot-examples。
+
+译者补充：这是有用的，因为我们要看物种对排序的影响，但是展示大量的物种loading图实在是不够清晰和直观，此时，我们使用subset_ord_plot函数根据设定的阈值和方法选择相应的点展示，这再好不过了。
+
+><font size=2>See their tutorials for further details and examples.
+
+><font size=2>Also, the phyloseq package includes a “convenience function” for subsetting from large collections of points in an ordination, called subset_ord_plot. There is a separate subset_ord_plot tutorial for further details and examples.
+
+
+
+
+### 载入本次分析需要的包，和数据
+**Load Packages, Prepare Data**
+
+phyloseq的排序函数为我们的排序分析进行了极大的简化，保证计算的同时兼顾可视化工作。
+
+
+```{r package, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+library("phyloseq"); packageVersion("phyloseq")
+library("ggplot2"); packageVersion("ggplot2")
+library("cluster"); packageVersion("cluster")
+library("plyr"); packageVersion("plyr")
+data(GlobalPatterns)
+
+```
+### 设置主题
+关于ggplot主题的设置参考：https://ggplot2.tidyverse.org/reference/
+><font size=2> ggplot2 package theme set. See the ggplot2 online documentation for further help.
+
+```{r theme, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+theme_set(theme_bw())
+
+```
+
+### 数据得到 并进行过滤
+
+我们想要过滤地丰度，不具有代表性的OTU，因为这些OTU可能在我们的处理过程中属于噪音。在实际运行过程中，需要进行合理的数据过滤并且详细记录下来。phyloseq支持这一步骤，并且有相关的数据处理示例。这一过程似乎是重要的，尤其是我们进行可视化数据或者想要在短时间内得到运行结果的时候。我们的教程提供了探索性的几种过滤方法，仅供参考，您在实际工作中根际具体的实验进行调整，并评估是否适合自己的数据。为了更快的演示不同的过滤和排序方法，下面对数据进行了过滤。要知道一些基于进化树的距离算法很耗时间的。注意本过滤过程旨在控制OTU数量，并不一定能保证OTU表格的整体生态特征。
+
+过滤read数量在一半样品中出现低于5的OTU。
+译者补充：
+- genefilter_sample函数和filterfun_sample都被封装到lphyloseq中，共同完成这个功能。
+- filterfunw可以使用者自定义函数，这里包装在phyloseq中，功能是类似的。其次genefilter_sample却在genefilter函数的基础上增加了A参数。进行双重过滤。
+
+><font size=2> We want to filter low-occurrence, poorly-represented OTUs from this data, because they are essentially noise variables for the purposes of this tutorial. In practice, you should probably perform and clearly-document well-justified preprocessing steps, which are supported in the phyloseq package with examples and details on a dedicated preprocessing tutorial.
+
+><font size=2> In this case preprocessing is especially useful for showing graphically the high-level patterns in the data, as well as creating examples that compute in a short amount of time. Your reasoning and decisions in preprocessing are extremely important, and up to you. I am using several different methods of preprocessing here, for illustration and because the extent of data reduction is useful for my purposes. However, I make no assertion that these are the “optimum” approach(es) for your data and research goals, but rather, I highly recommend that you think hard about any preprocessing that you do, document it completely, and only commit to including it in your final analysis pipeline if you can defend the choices and have checked that they are robust.
+
+><font size=2> To quickly demonstrate and compare the results of different ordination methods, I will first further filter/preprocess the OTUs in GP1. I want to include some phylogenetic tree-based ordinations, which can be slow to calculate. Since the goal of this exercise is to demonstrate the plot_ordination capability, and not necessarily reveal any new knowledge about the Global Patterns dataset, the emphasis on this preprocessing will be on limiting the number of OTUs, not protecting intrinsic patterns in the data.
+
+
+><font size=2> Remove OTUs that do not show appear more than 5 times in more than half the samples
+
+
+```{r data, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+GlobalPatterns
+GP = GlobalPatterns
+# ?genefilter_sample
+?filterfun_sample
+wh0 = genefilter_sample(GP, filterfun_sample(function(x) x > 5), A=0.5*nsamples(GP))
+# wh0
+GP1 = prune_taxa(wh0, GP)
+GP1
+```
+
+### 相对丰度标准化
+标准化结果乘10的六次方
+
+```{r transform, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+GP1 = transform_sample_counts(GP1, function(x) 1E6 * x/sum(x))
+```
+
+### 仅仅保留主要的五个门类的OTU
+><font size=2> Keep only the most abundant five phyla.
+
+
+```{r filter phylum, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+phylum.sum = tapply(taxa_sums(GP1), tax_table(GP1)[, "Phylum"], sum, na.rm=TRUE)
+top5phyla = names(sort(phylum.sum, TRUE))[1:5]
+GP1 = prune_taxa((tax_table(GP1)[, "Phylum"] %in% top5phyla), GP1)
+GP1
+```
+过滤后仍然保留204个OTU
+><font size=2> That still leaves 204 OTUs in the dataset, GP1.
+
+
+### 设置一个分类
+有一些OTU与人体相关，一些则不是，我们定义一个新的分类变量，包含与人类相关的和不相关的分类。接下来从这两个组中分别挑选比较重要的物种。
+><font size=2> We will want to investigate a major prior among the samples, which is that some are human-associated microbiomes, and some are not. Define a human-associated versus non-human categorical variable:
+
+get_variable函数用于处理mapping文件，根据指定的列对mapping文件提取子集
+```{r get_variable, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+human = get_variable(GP1, "SampleType") %in% c("Feces", "Mock", "Skin", "Tongue")
+human
+#对mapping文件添加一列，为性别类型，这里将其转化为因子变量。
+sample_data(GP1)$human <- factor(human)
+
+```
+## 四种主要的排序图
+**Four main ordination plots**
+plot_ordinationh函数提供了四种基本的排序展示，然而对于一些使用样本矩阵为做的排序，比如：PCOA和MDS，那么这种情况下是没有OTU的显示的，因为OTU也没有参与到排序中。
+><font size=2> The plot_ordination function supports four basic representations of an ordination. For some methods, like PCoA/MDS on a distance matrix of samples, any methods displaying OTUs is not supported because OTUs are not part of the ordination in that case.
+
+
+### (1)仅展示OTU
+**(1) Just OTUs**
+
+首先我们绘制OTU的loading图，使用门水平上色，请注意我们使用的数据集是子集，仅仅只包含204个OTU（ntaxa(GP1)= 204 OTUs）。
+
+><font size=2> Let’s start by plotting just the OTUs, and shading the points by Phylum. Note that even in our “trimmed” dataset there are  ntaxa(GP1)= 204 OTUs.
+
+译者补充：
+ordinate函数，我们只需要定义使用的排序方法：method，和使用的距离参数 distance,下面是基于bray距离进行NMDS排序
+
+type：函数指定我们出图的类型，type="taxa"为展示OTU在排序中的权重。
+下面展示loading矩阵信息,按照OTU所属的门进行上色展示loading。
+
+
+```{r phyloaeq封装的排序脚本使用, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+GP.ord <- ordinate(GP1, "NMDS", "bray")
+p1 = plot_ordination(GP1, GP.ord, type="taxa", color="Phylum", title="taxa")
+print(p1)
+```
+### 可选分面loading展示，更加清晰直观
+上一张图是分布了大量的点，这并不好，因为大量的点之间重叠互相遮盖，将对我们的阅读和理解图形造成了障碍。ggplot有几种方法可以进行处理。例如下面提到的：分面。
+
+><font size=2> This is a complicated looking plot, but that’s not necessarily good. There is actually a lot of overplotting/occlusion, which means that the high number of points is getting in the way of our visual understanding of the data. There are several ways to deal with this in ggplot2, for example, facetting:
+
+```{r loading展示，更加清晰直观, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+p1 + facet_wrap(~Phylum, 3)
+```
+
+### (2)对样品进行排序
+**(2) Just samples**
+接下来，我们仅仅绘制样品的分布图形，使用SampleType作为分组文件对样品进行上色。同时使用这些样品是否与人类相关给点使用不同的形状填充。
+另外我们添加了一些额外的修饰，例如同一组点之间的连线和填充。
+
+><font size=2> Next, let’s plot only the samples, and shade the points by “SampleType” while also modifying the shape according to whether they are human-associated. There are a few additional ggplot2 layers added to make the plot even nicer…
+
+译者补充：
+type 选择samples 对样品进行排序，这也是我们使用更多的一种y从来展示样品的方法。最近看到了一天NC，展示的就是类似的下图，由于不同样品点之间重叠过多，作者将每个组的点去合并为一个均值点，这将展示更少的信息，但是可以在差异较小的时候体现差异。
+
+
+```{r cars, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+p2 = plot_ordination(GP1, GP.ord, type="samples", color="SampleType", shape="human") 
+p2 + geom_polygon(aes(fill=SampleType)) + geom_point(size=5) + ggtitle("samples")
+```
+
+
+### (3)biplot 选项将样品和loading一同展示
+**(3) biplot graphic**
+plot_ordination函数提供了两种不同的输出方式来将样品点同OTU点一同展示。这种方法不能使用于仅仅展示样品的排序方法，例如：基于UniFrac的PCoA排序。
+
+><font size=2> The plot_ordination function can also automatically create two different graphic layouts in which both the samples and OTUs are plotted together in one “biplot”. Note that this requires methods that are not intrinsically samples-only ordinations. For example, this doesn’t work with UniFrac/PCoA.
+
+译者补充：
+biplot 选项将样品和loading一同展示,但是重叠很严重,这个画板大量的OTU被展示出来已经无法区分开用样品的位置。
+
+
+```{r biplot 选项将样品和loading一同展示, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+p3 = plot_ordination(GP1, GP.ord, type="biplot", color="SampleType", shape="Phylum", title="biplot")
+# Some stuff to modify the automatic shape scale
+GP1.shape.names = get_taxa_unique(GP1, "Phylum")
+GP1.shape <- 15:(15 + length(GP1.shape.names) - 1)
+names(GP1.shape) <- GP1.shape.names
+GP1.shape["samples"] <- 16
+p3 + scale_shape_manual(values=GP1.shape)
+```
+
+### (4) split 通过将两者分开；分面展示可以解决问题
+**(4) split graphic**
+嗯，确实，在图上样品点和OTU点重叠十分严重，这种情况下，使用选项type =“split”会有所帮助，使用ggplot中的分面将样品点和OTU点分开展示。
+
+><font size=2> Hmmm. In the previous graphic the occlusion problem is pretty strong. In this case the type="split" option can be helpful, in which the samples/OTUs are separated on two side-by-side panels…
+
+```{r split 通过将两者分开分, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+p4 = plot_ordination(GP1, GP.ord, type="split", color="Phylum", shape="human", label="SampleType", title="split") 
+p4
+```
+
+
+><font size=2> Probably much better if sample colors were black. The following function reproduces ggplot2’s default color scale. Solution borrowed from a StackOverflow page on ggplot2.
+
+```{r 自定义颜色, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+gg_color_hue <- function(n){
+    hues = seq(15, 375, length=n+1)
+    hcl(h=hues, l=65, c=100)[1:n]
+}
+color.names <- levels(p4$data$Phylum)
+p4cols <- gg_color_hue(length(color.names))
+names(p4cols) <- color.names
+p4cols["samples"] <- "black"
+p4 + scale_color_manual(values=p4cols)
+```
+
+
+### （4）下面使用多种排序方法进行排序，并比对
+**Supported Ordination Methods**
+这一部分我们将不同的排序方法作为参数，编写循环，使用plot_ordination函数逐个运行，将得到的图片存储在列表中。然后使用gggplot组合结果共同展示出来。
+
+><font size=2> In this section I loop through different method parameter options to the plot_ordination function, store the plot results in a list, and then plot these results in a combined graphic using ggplot2.
+
+译者补充:
+在之前的排序学习中，我们知道phyloseq中集成了超过40种算法的otu表格距离计算。在尝试不同距离后，我们再次尝试不同排序方法。这里共有7中排序；
+
+
+```{r 下面使用多种排序方法进行排序，并比对, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+dist = "bray"
+ord_meths = c("DCA", "CCA", "RDA", "DPCoA", "NMDS", "MDS", "PCoA")
+plist = llply(as.list(ord_meths), function(i, physeq, dist){
+        ordi = ordinate(physeq, method=i, distance=dist)
+        plot_ordination(physeq, ordi, "samples", color="SampleType")
+}, GP1, dist)
+```
+### 提取作图所需数据
+上面的代码我们执行设定的几种排序方法，使用排序方法为列表中的每个对应的图形命名。下面我们基于每个排序的结果提取前两轴坐标，并保存在数据框中方便使用ggplot出图。
+
+><font size=2> The previous code chunk performed each ordination method, created the corresponding graphic based on the first two axes of each ordination result, and then stored each ggplot2 plot object in a different named element of the list named plist. The following chunk will extract the data from each of those individual plots, and put it back together in one big data.frame suitable for including all plots in one graphic.
+
+
+
+```{r 提取作图所需数据, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+names(plist) <- ord_meths
+pdataframe = ldply(plist, function(x){
+    df = x$data[, 1:2]
+    colnames(df) = c("Axis_1", "Axis_2")
+    return(cbind(df, x$data))
+})
+names(pdataframe)[1] = "method"
+```
+
+展示全部排序结果
+我们得到所有的图形坐标的数据框文件此处命名为：pdataframe。我们下面使用这个数据框制作标准的各种方法分面散点图。
+
+><font size=2> Now that all the ordination results are combined in one data.frame, called pdataframe, we can use this to make a standard faceted ggplot scatterplot.
+
+
+```{r plot ori, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+p = ggplot(pdataframe, aes(Axis_1, Axis_2, color=SampleType, shape=human, fill=SampleType))
+p = p + geom_point(size=4) + geom_polygon()
+p = p + facet_wrap(~method, scales="free")
+p = p + scale_fill_brewer(type="qual", palette="Set1")
+p = p + scale_colour_brewer(type="qual", palette="Set1")
+p
+```
+选择其中一个展示
+如果要绘制单个的排序的图形，我们可以从plist中提取，注意该列表中存储的都是ggplot图形，比如，我们使用 plist提取DCA结果。
+
+
+><font size=2> If you want to replot a larger version of an individual plot, you can do by printing from the original plist from which  pdataframe was made. Each element of plist is already a ggplot2 graphic. For example, we can replot the detrended correspondence analysis (DCA) by printing the second element of the list.
+
+译者补充：
+phyloseq基于ggplot的出图当然具有ggplot出图的优势。就像有一块橡皮一样，随时擦去并附上新的参数。
+```{r 选择其中一个展示, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+plist[[2]] 
+```
+ 
+对展示图形进行修饰，添加一些额外的图形使得更好看。
+
+```{r 对展示图形进行修饰, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+p = plist[[2]] + scale_colour_brewer(type="qual", palette="Set1")
+p = p + scale_fill_brewer(type="qual", palette="Set1")
+p = p + geom_point(size=5) + geom_polygon(aes(fill=SampleType))
+p
+```
+
+
+### unifrac距离进行PCoa分析
+
+使用加权的unifrac距离做PCOA排序分析，然后将排序结果传递对函数plot_ordination，进行出图。
+
+><font size=2> Use the ordinate function to simultaneously perform weightd UniFrac and then perform a Principal Coordinate Analysis on that distance matrix (first line). Next pass that data and the ordination results to plot_ordination to create the ggplot2 output graphic with default ggplot2 settings.
+
+```{r unifrac距离进行PCoa分析, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+ordu = ordinate(GP1, "PCoA", "unifrac", weighted=TRUE)
+plot_ordination(GP1, ordu, color="SampleType", shape="human")
+```
+
+
+现在让我们更好的展示排序结果
+
+><font size=2> Now make the graphic look nicer with a few additional ggplot2 layers.
+
+```{r 展示排序结果, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+p = plot_ordination(GP1, ordu, color="SampleType", shape="human")
+p = p + geom_point(size=7, alpha=0.75)
+p = p + scale_colour_brewer(type="qual", palette="Set1")
+p + ggtitle("MDS/PCoA on weighted-UniFrac distance, GlobalPatterns")
+```
+
+### 译者：当我们将排序做完之后
+
+在微生物群落分析中，beta多样性往往于本教程提到的距离和排序密切相关，基本上每篇文章都要展示一个基于某中距离的排序三点图。那么，本教程是否可以完全cover这种需求呢？
+在我看来还需要补充一些东西或者可选内容：
+
+添加分析内容：
+- 基于距离的差异分析需要补充。肉眼的距离差异并不够。
+出图可选添加内容：
+- 往往对于一些分组为了强调他们的区分，会添加置信椭圆。
+- 可选的想差异分析结果展示在图片上。横纵坐标标签更换为排序方法。
+
+
+## reference
+https://joey711.github.io/phyloseq/plot_ordination-examples.html

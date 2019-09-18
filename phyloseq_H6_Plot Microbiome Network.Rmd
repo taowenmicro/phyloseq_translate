@@ -1,0 +1,158 @@
+---
+title: "phyloseq_H6_Plot Microbiome Network"
+author: "wentao"
+date: "2019/8/23"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 绘制微生物网络
+**Plot Microbiome Network**
+
+
+```{R}
+library(phyloseq); packageVersion("phyloseq")
+packageVersion("ggplot2")
+```
+
+```{R}
+data(enterotype)
+enterotype
+```
+
+
+因为某些网络的布局有随机的的成分在里面，所以这里需要设置随机种子保证出图一样。
+
+><font size=2>There is a random aspect to some of the network layout methods. For complete reproducibility of the images produced later in this tutorial, it is possible to set the random number generator seed explicitly:
+
+```{R}
+set.seed(711L)
+```
+
+
+因为我们想使用肠道类型相关样本进行网络图绘制，所以去除非肠道类型的样本。这一一共去除了九个样本。（这一操作让我们避免了一些讨厌的警告信息）
+
+><font size=2>Because we want to use the enterotype designations as a plot feature in these plots, we need to remove the 9 samples for which no enterotype designation was assigned (this will save us the hassle of some pesky warning messages, but everything still works; the offending samples are anyway omitted).
+
+```{R}
+enterotype = subset_samples(enterotype, !is.na(Enterotype))
+enterotype 
+```
+### plot_net函数：网络图绘制
+**The plot_net function**
+
+
+
+plot_net已经集成了make_network函数，也不需要添加igraph对象。这可能增加了一些对igraph控制的灵活性，详细参照plot_network的帮助文件。
+
+
+译者备注：这里注意默认是对样品之间的相关网路的绘制。默认参数 type = "samples"。
+
+><font size=2>The newer plot_net function does not require a separate make_network function call, or a separate igraph object. For examples running the older plot_network function, which may provide some added flexibility with igraph objects, see the plot_network section later.
+
+
+```{R}
+# ?plot_net
+plot_net(enterotype, maxdist = 0.4, point_label = "Sample_ID")
+```
+
+上图展示了一些有趣的结构，这幅图中主要包含两个大的部分，并且样品命名似乎和样本在网络中的位置相关。我们并不是试图获取全部的样本名来理解样品的模式，而是通过这些信息对样品进行上色和使用不同的形状点区分。
+
+><font size=2>The previous graphic displayed some interesting structure, with one or two major subgraphs comprising a majority of samples. Furthermore, there seemed to be a correlation in the sample naming scheme and position within the network. Instead of trying to read all of the sample names to understand the pattern, let’s map some of the sample variables onto this graphic as color and shape:
+
+
+### plot_net函数集成网络图分析和出图
+
+```{R}
+library(ggplot2)
+plot_net(enterotype, maxdist = 0.3, color = "SeqTech", shape="Enterotype")
+
+```
+
+在前面的例子中，最大距离和排序方法的选择是默认的，但是这是灵活的，我们在这里尝试当maxdist减少是会发生什么。（这将会减少网络中边的数量）
+
+><font size=2>In the previous examples, the choice of maximum-distance and distance method were informed, but arbitrary. Try what happens when maxdist value is decreased (hint: this will usually decrease the number of edges in the network).
+
+
+
+### make_network用于创建网络 plot_network仅用于可视化
+plot_network函数仅仅由于出图。这里配合make_network函数使用。
+max.dist参数设置节点之间的最大距离，调节大小用于控制网络边的数量。类似平时我们设置的相关阈值。z合理基于jacccard距离调整节点最贱最大的距离为0.3.也就是说保留相似度大于0.7的边。
+
+><font size=2>Create an igraph-based network based on the default distance method, “Jaccard”, and a maximum distance between connected nodes of 0.3.
+
+```{R}
+ig <- make_network(enterotype, max.dist=0.3)
+#使用默认参数可视化这张网络
+plot_network(ig, enterotype)
+
+```
+根据样本分组信息添加不同颜色和形状进行区分。
+
+```{R}
+plot_network(ig, enterotype, color="SeqTech", shape="Enterotype", line_weight=0.4, label=NULL)
+```
+类似上面一个例子，通过调整max.dist大小改变网络边的数量。
+
+plot_network函数仅仅由于出图。这里配合make_network函数使用。
+```{R}
+ig <- make_network(enterotype, max.dist=0.2)
+plot_network(ig, enterotype, color="SeqTech", shape="Enterotype", line_weight=0.4, label=NULL)
+```
+让我们重复之前的案例，但是使用bray距离构建网络
+
+><font size=2>Let’s repeat the previous exercise, but replace the Jaccard (default) distance method with Bray-Curtis
+
+```{R}
+ig <- make_network(enterotype, dist.fun="bray", max.dist=0.3)
+plot_network(ig, enterotype, color="SeqTech", shape="Enterotype", line_weight=0.4, label=NULL)
+```
+
+
+## 译者补充：物种网络的简单试炼
+
+### 现在我们尝试taxa网络
+
+type参数设置为taxa
+
+```{R}
+enterotype
+
+plot_net(enterotype,type = "taxa",maxdist = 0.4)
+```
+### 这里我们使用OTU做网络
+
+为了提高速度，我们使用之前学习的函数提取丰度最高的前100个OTU。
+```{R}
+# ?subset_taxa
+myTaxa = names(sort(taxa_sums(enterotype), decreasing = TRUE)[1:100])
+ps1 = prune_taxa(myTaxa, enterotype)
+ps1
+plot_net(ps1,type = "taxa",maxdist = 0.4,color = "Genus")
+
+```
+
+
+
+```{R}
+plot_net(ps1,type = "taxa",maxdist = 0.6,color = "Genus")
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+### reference
+https://joey711.github.io/phyloseq/plot_network-examples.html
+
