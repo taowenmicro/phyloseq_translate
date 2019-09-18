@@ -1,2 +1,3 @@
-# phyloseq_translate
-phyloseq R 
+# phyloseq教程全套中文翻译
+写在前面：
+基于phyloseq的封装体系我们对微生物组数据的分析可以做更好的尝试。下main就让我们一共开始吧!
