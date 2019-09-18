@@ -1,0 +1,169 @@
+---
+title: "phyloseq_5_The distance function in phyloseq"
+author: "wentao"
+date: "2019/8/23"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# phyloseq中的距离
+**The distance function in phyloseq**
+
+
+```{R}
+library("phyloseq"); packageVersion("phyloseq")
+library("ggplot2"); packageVersion("ggplot2")
+library("plyr"); packageVersion("plyr")
+theme_set(theme_bw())
+
+```
+### 首先我们了解一下距离函数
+**The distance function**
+
+
+在phyloseq中可以实现许多不同距离功能，并且可以基于某种距离选择合适的排序方法或者其他基于距离的分析。目前包含在phyloseq中的距离一共有44种。或者用户可以自己设计距离：通过vegan :: designdist函数实现。distanceMethodList查看全部的距离及其参数。目前仅仅支持基于样本的距离，在未来我们也将支持基于OTU的距离算法。
+
+
+><font size=2>The distance function takes a phyloseq-class object and method option, and returns a dist-class distance object suitable for certain ordination methods and other distance-based analyses. There are currently 44 explicitly supported method options in the phyloseq package, as well as user-provided arbitrary methods via an interface to vegan::designdist. For the complete list of currently supported options/arguments to the method parameter, type distanceMethodList in the command-line of your R session. Only sample-wise distances are currently supported (the type argument), but eventually OTU-wise (e.g. species) distances will be supported as well.
+
+><font size=2>See the in-package documentation of distance for further details:
+
+
+### 用法
+```{R eval=FALSE, include=FALSE}
+# ?distance
+distance(physeq, method="unifrac", type="samples", ...)
+
+```
+### 示例：使用不同的距离对Enterotypes数据集进行分析
+
+**Example: “Enterotypes” dataset using many different methods**
+函数distance()组织了全部距离算法，所以基于距离的计算就变得简单了。下面使用代码就Enterotypes数据集执行传布的距离算法，这里使用循环来自动化计算。并且批量绘制基于距离的排序分析图表。请注意，这里我们省略了三个距离算法，因为这些距离算法需要进化树。这个数据集Enterotypes中没有。
+
+运行的时候我们要注意，这将非常耗费时间，因此在做自己的数据时，我们要提前选择自己感兴趣的距离算法进行计算。
+
+
+
+><font size=2>Because the distance() function organizes distance calculations into one function, it is relatively straightforward to calculate all supported distance methods and investigate the results. The following code will perform such a loop on the “Enterotypes” dataset, perform multi-dimensional scaling (a.k.a. principle coordinates analysis), and plot the first two axes, shading and shaping the points in each plot according to sequencing technology and assigned “Enterotype” label.
+
+><font size=2>Note that we have omitted the options that require a phylogenetic tree because the "enterotype" example dataset currently included in the phyloseq-package does not have one.
+
+><font size=2>Note that this may take a little while to run, depending on the size of your data set, but you may not be interested in all supported distances…
+
+下面我们进行统计phyloseq终究包含多少中距离算法，一共有47种。
+```{R}
+
+data(enterotype)
+enterotype <- subset_taxa(enterotype, Genus != "-1")
+dist_methods <- unlist(distanceMethodList)
+print(dist_methods)
+length(dist_methods)
+```
+
+
+### 下面展示三种需要进化树的距离算法
+```{R}
+
+dist_methods[(1:3)]
+```
+### 去除三种需要进化树的距离算法
+```{R}
+# Remove them from the vector
+dist_methods <- dist_methods[-(1:3)]
+# 下面提取y由使用者自己定义的距离算法
+dist_methods["designdist"]
+# 去除这种算法
+dist_methods = dist_methods[-which(dist_methods=="ANY")]
+
+
+```
+### 那我们尝试将着43种算法全部做一遍
+
+```{R}
+
+plist <- vector("list", length(dist_methods))
+names(plist) = dist_methods
+for( i in dist_methods ){
+    # Calculate distance matrix
+    iDist <- distance(enterotype, method=i)
+    # Calculate ordination
+    iMDS  <- ordinate(enterotype, "MDS", distance=iDist)
+    ## Make plot
+    # Don't carry over previous plot (if error, p will be blank)
+    p <- NULL
+    # Create plot, store as temp variable, p
+    p <- plot_ordination(enterotype, iMDS, color="SeqTech", shape="Enterotype")
+    # Add title to each plot
+    p <- p + ggtitle(paste("MDS using distance method ", i, sep=""))
+    # Save the graphic to file.
+    plist[[i]] = p
+}
+```
+
+### 提取坐标，分面展示全部距离结果
+**Combine results**
+
+
+```{R}
+df = ldply(plist, function(x) x$data)
+names(df)[1] <- "distance"
+p = ggplot(df, aes(Axis.1, Axis.2, color=SeqTech, shape=Enterotype))
+p = p + geom_point(size=3, alpha=0.5)
+p = p + facet_wrap(~distance, scales="free")
+p = p + ggtitle("MDS on various distance metrics for Enterotype dataset")
+p
+
+```
+
+### 换个分组展示
+**Shade according to assigned enterotype**
+
+```{R}
+df = ldply(plist, function(x) x$data)
+names(df)[1] <- "distance"
+p = ggplot(df, aes(Axis.1, Axis.2, color=Enterotype, shape=SeqTech))
+p = p + geom_point(size=3, alpha=0.5)
+p = p + facet_wrap(~distance, scales="free")
+p = p + ggtitle("MDS on various distance metrics for Enterotype dataset")
+p
+
+```
+
+### 选择指定距离的排序结果
+**Compare results**
+
+下图展示特定的排序结果：isd距离排序结果
+
+><font size=2>The following are some selected examples among the created plots.
+
+><font size=2>Jensen-Shannon Divergence
+
+
+```{R}
+print(plist[["jsd"]])
+
+```
+
+jaccard距离】
+
+```{R}
+print(plist[["jaccard"]])
+
+```
+
+gower距离
+
+```{R}
+print(plist[["gower"]])
+
+```
+
+w距离
+
+```{R}
+
+print(plist[["w"]])
+```

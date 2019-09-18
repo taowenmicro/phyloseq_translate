@@ -1,0 +1,90 @@
+---
+title: "phyloseq_2_Example Data in phyloseq"
+author: "wentao"
+date: "2019/8/23"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+```
+
+# phyloseq示例
+**Example Data in phyloseq**
+
+ggplot2包主题设置。更多帮助，请参阅ggplot2联机文档。
+
+><font size=2>ggplot2 package theme set. See the ggplot2 online documentation for further help.</font>
+
+```{R}
+library("phyloseq"); packageVersion("phyloseq")
+library("ggplot2"); packageVersion("ggplot2")
+theme_set(theme_bw())
+
+```
+
+
+phyloseq中自带有多份数据，许多来自发表的文献
+><font size=2>There are multiple example data sets included in phyloseq. Many are from published investigations and include documentation with a summary and references, as well as some example code representing some aspect of analysis available in phyloseq.</font>
+
+data()函数将数据载入到R的环境中。
+
+><font size=2>To load example data into the working environment, use the data() command:</font>
+
+```{R}
+
+#使用phyloseq
+data(GlobalPatterns)
+data(esophagus)
+data(enterotype)
+data(soilrep)
+
+```
+
+### 文档
+**Documentation**
+
+在包索引目录中，转到以“data”开头的名称以查看当前可用示例数据集的文档。
+
+><font size=2>In the package index, go to the names beginning with “data-” to see the documentation of currently available example datasets.</font>
+
+查看GlobalPatterns数据介绍
+```{R eval=FALSE, include=FALSE}
+# ?GlobalPatterns
+
+```
+浏览GlobalPatterns数据集
+
+><font size=2>to access the documentation for the so-called “GlobalPatterns” dataset</font>
+
+####  调用数据：测试一个例子文件
+*Run provided examples*
+
+可以使用r中的example命令来展示示例数中包含的例子（以及函数/方法的示例），在本例中是enterotype数据集
+
+><font size=2>You can also try the examples included with the example data documentation (as well as examples for functions/methods) using the standard example command in R – in this case the examples for the enterotype dataset</font>
+
+```{R}
+example(enterotype, ask=FALSE)
+
+# ?example
+```
+
+example 命令拆分，即为一下三条命令
+
+```{R}
+data(enterotype)
+ig <- make_network(enterotype, "samples", max.dist=0.3)
+
+plot_network(ig, enterotype, color="SeqTech", shape="Enterotype", line_weight=0.3, label=NULL)
+```
+
+
+### reference
+https://joey711.github.io/phyloseq/Example-Data.html
+
+

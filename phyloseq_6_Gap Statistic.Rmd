@@ -1,0 +1,123 @@
+---
+title: "phyloseq_6_Gap Statistic"
+author: "wentao"
+date: "2019/8/23"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+# 聚类分析
+**Gap Statistic**
+
+
+### 这批数据究竟能聚类成几份呢？
+**How many clusters are there?**
+
+我们对数据进行分类，看看到底聚成多少的类别。
+Gap统计值来确定k的个数，通过对数据进行bootstrap抽样来比较内差异性。这里使用cluster软件包里面的clusGap函数计算。
+
+以下是phyloseq用于聚类的案例，并且将结果使用包装在phyloseq包中的ggplot展示。
+
+><font size=2>From the clusGap documentation: The clusGap function from the cluster package calculates a goodness of clustering measure, called the “gap” statistic. For each number of clusters k, it compares (W(k)) with E^*[(W(k))] where the latter is defined via bootstrapping, i.e. simulating from a reference distribution.
+
+><font size=2>The following is an example performing the gap statistic on ordination results calculated using phyloseq tools, followed by an example of how a ggplot-based wrapper for this example might be included in the phyloseq package.
+
+
+载入包，查看版本信息
+```{R}
+
+library("phyloseq"); packageVersion("phyloseq")
+library("cluster"); packageVersion("cluster")
+library("ggplot2"); packageVersion("ggplot2")
+```
+
+
+
+### 导入绘图主题和数据
+
+```{R}
+theme_set(theme_bw())
+# Load data
+data(enterotype)
+```
+
+
+进行系统聚类时，先计算样本之间的距离， 这里使用jsd距离进行MDS排序
+><font size=2>in this case, MDS on the Bray-Curtis distance.
+
+```{R}
+# ordination
+exord = ordinate(enterotype, method="MDS", distance="jsd")
+
+```
+### 聚类计算
+Compute Gap Statistic
+
+根据排序得分估计最优聚类
+clusGap()函数一般我们用于来计算用于估计最优聚类k个数
+```{R}
+pam1 = function(x, k){list(cluster = pam(x,k, cluster.only=TRUE))}
+x = phyloseq:::scores.pcoa(exord, display="sites")
+# gskmn = clusGap(x[, 1:2], FUN=kmeans, nstart=20, K.max = 6, B = 500)
+gskmn = clusGap(x[, 1:2], FUN=pam1, K.max = 6, B = 50)
+gskmn
+```
+
+
+### 可视化K值
+
+```{R}
+library(factoextra)
+
+library(cluster)
+fviz_gap_stat(gskmn)
+
+
+```
+
+
+### 下面构造统计函数，方便运算，构造出图函数。
+
+```{R}
+
+gap_statistic_ordination = function(ord, FUNcluster, type="sites", K.max=6, axes=c(1:2), B=500, verbose=interactive(), ...){
+    require("cluster")
+    #   If "pam1" was chosen, use this internally defined call to pam
+    if(FUNcluster == "pam1"){
+        FUNcluster = function(x,k) list(cluster = pam(x, k, cluster.only=TRUE))     
+    }
+    # Use the scores function to get the ordination coordinates
+    x = phyloseq:::scores.pcoa(ord, display=type)
+    #   If axes not explicitly defined (NULL), then use all of them
+    if(is.null(axes)){axes = 1:ncol(x)}
+    #   Finally, perform, and return, the gap statistic calculation using cluster::clusGap  
+    clusGap(x[, axes], FUN=FUNcluster, K.max=K.max, B=B, verbose=verbose, ...)
+}
+
+
+
+plot_clusgap = function(clusgap, title="Gap Statistic calculation results"){
+    require("ggplot2")
+    gstab = data.frame(clusgap$Tab, k=1:nrow(clusgap$Tab))
+    p = ggplot(gstab, aes(k, gap)) + geom_line() + geom_point(size=5)
+    p = p + geom_errorbar(aes(ymax=gap+SE.sim, ymin=gap-SE.sim))
+    p = p + ggtitle(title)
+    return(p)
+}
+
+```
+
+计算
+```{R}
+gs = gap_statistic_ordination(exord, "pam1", B=50, verbose=FALSE)
+print(gs, method="Tibs2001SEmax")
+
+```
+
+可视化结果
+```{R}
+plot_clusgap(gs)
+
+```

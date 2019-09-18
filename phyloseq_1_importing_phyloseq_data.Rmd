@@ -1,0 +1,485 @@
+---
+title: "phyloseq_importing_phyloseq_data"
+author: "wentao"
+date: "2019/8/23"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+```
+
+# 导入phyloseq数据
+**Importing phyloseq Data**
+
+### 载入phyloseq包
+**load packages phyloseq**
+===
+importers读取外部数据文件并返回一个phyloseq类型的例子。数据之间的有效性和一致性由函数physoSeq（）检查，phyloSeq()是由importers调用，同时也推荐使用它来为手动输入的数据创建phyloseq项目。根据OTU和样品名称进行交叉索引检查，并对其进行过滤/重新排序，以便所有可用数据以相同的顺序描述OTU和样本。
+
+译者补充：也就是说组成phyloseq的每一个部分都是有一样的OTUh或者样品数量和顺序还有编号。
+
+><font size=2>The custom functions that read external data files and return an instance of the phyloseq-class are called importers. Validity and coherency between data components are checked by the phyloseq-class constructor, phyloseq() which is invoked internally by the importers, and is also the recommended function for creating a phyloseq object from manually imported data.The component indices representing OTUs or samples are checked for intersecting indices, and trimmed/reordered such that all available (non-) component data describe exactly the same OTUs and samples, in the same order.</font>
+
+在安装physoSeq包之后使用library（“physoSeq”）加载，使用?import来查看说明文档，了解可用的输入函数的概述和指向特定文档页的链接，或参考下面例子使用一些更通用的导入函数 
+
+><font size=2>See ?import after phyloseq has been loaded ( library("phyloseq") ), to get an overview of available import functions and documentation links to their specific doc pages, or see below for examples using some of the more popular import functions</font>
+
+```{R}
+library("phyloseq"); packageVersion("phyloseq")
+library("ggplot2"); packageVersion("ggplot2")#出图
+theme_set(theme_bw())#定义主题
+```
+
+下面是phyloseq的内置数据集，data函数将phyloseq包内置数据转化成为整个R环境可用数据集.例如， “Global Patterns”数据集通过以下命令可以被加载到R的工作目录下
+
+><font size=2>The data command in the R language loads pre-imported datasets that are included in packages. For example, the “Global Patterns” dataset can be loaded into the R workspace with the following command</font>
+
+
+```{R}
+data(GlobalPatterns)
+GlobalPatterns
+```
+
+### phyloseq格式
+**phyloseq-ize Data already in R**
+
+phyloseq提供了数据导入的多种方式，常见的微生物群落分析流程的数据格式我们已经编写了函数导入到phyloseq，但是我们的数据并不都输出自常用的流程，所以希望广大的研究者编写的特殊的数据格式和新的数据格式导入函数共享。
+
+><font size=2>Any data already in an R session can be annoated/coerced to be recognized by phyloseq’s functions and methods. This is important, because there are lots of ways you might receive data related to a microbiome project, and not all of these will come from a popular server or workflow that is already supported by a phyloseq import function. There are, however, lots of general-purpose tools available for reading any common file format into R. We also want to encourage users to create and share their own import code for special/new data formats as they arive. </font>
+
+> 此处插入图片
+![Caption for the picture.](./phyloseq_1.png)
+
+尤其是基于这些原因，physoSeq提供了构建physoSeq数据的工具，以及构建experiment-level,multi-component phyloseq-class数据项目。这些功能与当前可用的导入程序拥有的功能相同。
+
+><font size=2>For these reasons especially, phyloseq provides tools for constructing phyloseq component data,and the experiment-level multi-component data object, the phyloseq-class. These are the same functions used internally by the currently available importers. </font>
+
+phyloseq包首先要学习的内容就是下面这四个函数。
+```{R}
+# ?phyloseq
+# ?otu_table
+# ?sample_data
+# ?tax_table
+
+```
+- otu_table -适用于任何数值矩阵,但必须指定物种所在是行还是列
+
+><font size=2>otu_table - Works on any numeric matrix. You must also specify if the species are rows or columns</font>
+
+- sample_data -在数据框上工作，如果计划将行名称合并为physoSeq对象，则行名称必须与OTU表中的示例名称匹配。
+
+><font size=2>sample_data - Works on any data.frame. The rownames must match the sample names in the otu_table if you plan to combine them as a phyloseq-object</font>
+
+- phyloseq -将OTU表和phyloSeq中有效组件的无序列表作为参数，包括sample_data, tax_table, phylo, XStringSet，系统发育树的提示标签必须与OTU表的OTU名称匹配，同样，Xstringset对象的序列名称必须与OTU表的OTU名称匹配
+
+><font size=2>phyloseq - Takes as argument an otu_table and any unordered list of valid phyloseq components: sample_data, tax_table, phylo, or XStringSet. The tip labels of a phylo-object (tree) must match the OTU names of the otu_table, and similarly, the sequence names of an XStringSet object must match the OTU names of the otu_table.</font>
+
+- tax_table - 适用于任何字符矩阵。如果要将行名称与physoSeq对象组合，则行名称必须与OTU表的OTU名称（taxa_名称）匹配。
+
+><font size=2>tax_table - Works on any character matrix. The rownames must match the OTU names (taxa_names) of the otu_table if you plan to combine it with a phyloseq-object.</font>
+
+- merge_phyloseq函数可以将任意phyloseq组分或者子组分进行合并，形成更大的封装对象。这对于一些已经构建好的phyloseq对象中添加内容十分有用。
+><font size=2>merge_phyloseq - Can take any number of phyloseq objects and/or phyloseq components, and attempts to combine them into one larger phyloseq object. This is most-useful for adding separately-imported components to an already-created phyloseq object.
+
+注意：只有当OTU在OTU表格或者注释文件，或者进化树中等全部phyloseq封装的组分中出现的时候才会被整合进去，否则对于某个部分没有的OTU会过滤掉。
+
+><font size=2>Note: OTUs and samples are included in the combined object only if they are present in all components. For instance, extra “leaves” on the tree will be trimmed off when that tree is added to a phyloseq object.
+
+例子：下面我们使用R构建一个随机OTU表格。并将phyloseq的不同对象合并，如果你可以将自己得到数据导入R，然后你就可以使用下面的函数进行自己的数据的封装。
+
+><font size=2>Example - In the following example, we will define random example data tables in R, and then combine these into a phyloseq object. If you are able to get your data tables into R, then you can apply the following method to manually create phyloseq instances of your own data.
+
+We’ll create the example vanilla R tables using base R code. No packages required yet.
+
+这里构建随机矩阵，并不需要载入R包
+
+><font size=2>We’ll create the example vanilla R tables using base R code. No packages required yet.</font>
+
+```{R}
+#使用随机抽样函数构建一个模拟otu表格
+otumat = matrix(sample(1:100, 100, replace = TRUE), nrow = 10, ncol = 10)
+otumat
+```
+
+#### otu表格需要otu名称和样品名称
+需要示例名称和OTU名称，自己的矩阵的索引名称可能已经有了这个名称
+
+<font size=2>It needs sample names and OTU names, the index names of the your own matrix might already have this</font>
+```{R}
+rownames(otumat) <- paste0("OTU", 1:nrow(otumat))
+colnames(otumat) <- paste0("Sample", 1:ncol(otumat))
+otumat
+
+```
+#### 构造tax注释文件
+现在我们需要创造一个注释文件
+
+<font size=2>Now we need a pretend taxonomy table</font>
+
+注意otu表格和注释文件都是matrix格式的
+
+```{R}
+
+taxmat = matrix(sample(letters, 70, replace = TRUE), nrow = nrow(otumat), ncol = 7)
+rownames(taxmat) <- rownames(otumat)
+colnames(taxmat) <- c("Domain", "Phylum", "Class", "Order", "Family", "Genus", "Species")
+taxmat
+
+```
+
+#### 矩阵形式的otu表格和注释文件首先使用 otu_table和tax_table函数修饰
+
+注意现在只是普通R矩阵，我们来告诉physoSeq如何将它们组合成physoSeq对象，在前几行中，我们甚至不需要加载physoseq，但是现在需要了
+
+<font size=2>Note how these are just vanilla R matrices. Now let’s tell phyloseq how to combine them into a phyloseq object. In the previous lines, we didn’t even need to have phyloseq loaded yet. Now we do.</font>
+```{R}
+library("phyloseq")
+OTU = otu_table(otumat, taxa_are_rows = TRUE)
+TAX = tax_table(taxmat)
+OTU
+TAX
+```
+
+
+#### phyloseq包中的phyloseq为封装函数，封装otu表格，注释文件
+```{R}
+physeq = phyloseq(OTU, TAX)
+physeq
+
+```
+#### phyloseq包中写了许多简化的微生物群落分析功能；plot_bar：按照门类展示物种丰度信息
+
+
+
+```{R}
+plot_bar(physeq, fill = "Family")
+
+```
+
+#### 编写mapping文件
+假设我们还有其他类型的数据，创建随机样本数据，并将其添加到组合的数据集中。确保示例名称与OTU表的示例名称匹配
+
+<font size=2>Let’s add to this, pretending we also had other types of data available.Create random sample data, and add that to the combined dataset. Make sure that the sample names match the sample_names of the otu_table</font>
+
+```{R}
+
+sampledata = sample_data(data.frame(
+  Location = sample(LETTERS[1:4], size=nsamples(physeq), replace=TRUE),
+  Depth = sample(50:1000, size=nsamples(physeq), replace=TRUE),
+  row.names=sample_names(physeq),
+  stringsAsFactors=FALSE
+))
+sampledata
+```
+#### 构造随机树
+
+现在用ape包创建一个随机的系统进化树，并将其添加到数据集中，确保标签与OTU表格匹配。
+
+<font size=2>Now create a random phylogenetic tree with the ape package, and add it to your dataset. Make sure its tip labels match your OTU_table.</font>
+```{R}
+library("ape")
+random_tree = ape::rtree(ntaxa(physeq), rooted=TRUE, tip.label=taxa_names(physeq))
+plot(random_tree)
+?rtree
+
+
+```
+
+#### 最终我们的phyloseq对象纳入了mapping文件和tree文件
+现在让我们把这些结合起来，我们可以使用merge-physoseq增加新的数据内容至physoseq，也可以使用physoseq重新构建。两者结果应该是相同的，在访问函数的帮助下，我们可以任选其一。
+
+<font size=2>Now let’s combine these altogether. We can do this either by adding the new data components to the phyloseq object we already have by using merge_phyloseq, or we can use a fresh new call to phyloseq to build it again from scratch. The results should be identical, and we can check. You can always do either one with the help from accessor functions, and the choice is stylistic.</font>
+
+也就是说phyloseq函数最终封装了四部分微生物群落分析的主要文件：
+- otu表格
+- tax 注释文件
+- mapping 分组文件
+- 进化树（这里使用随机树表示）
+
+使用现有的phyloseq项目进行合并：
+<font size=2>Merge new data with current phyloseq object:</font>
+```{R}
+
+physeq1 = merge_phyloseq(physeq, sampledata, random_tree)
+physeq1
+
+```
+
+我们不仅仅可以对现有封装不完整的phyloseq添加mapping文件和进化树，也可以单独拎出来四个文件进行封装。
+<font size=2>Rebuild phyloseq data from scratch using all the simulated data components we just generated:</font>
+```{R}
+
+physeq2 = phyloseq(OTU, TAX, sampledata, random_tree)
+physeq2
+
+```
+
+#### 通过identical可以鉴定两个phyloseq对象是否相同
+*Are they identical?*
+```{R}
+
+identical(physeq1, physeq2)
+
+```
+
+
+#### phyloseq写了一些简便的封装函数还有：plot_tree
+用于可视化进化树。如今ggtree也可以实现类似的ggplot版本的进化树，两者都在进化树方面下了一些功夫，方向不同。
+
+用新的组合数据构建发育树图
+
+<font size=2>Let’s build a couple tree plots with the new combined data</font>
+```{R}
+plot_tree(physeq1, color="Location", label.tips="taxa_names", ladderize="left", plot.margin=0.3)
+
+```
+
+plot_tree函数对叶节点的修饰工作下了不少功夫
+
+
+```{R}
+plot_tree(physeq1, color="Depth", shape="Location", label.tips="taxa_names", ladderize="right", plot.margin=0.3)
+
+```
+#### phyloseq封装了一个ggplot版本的热图
+默认横坐标为样本，纵坐标为OTU水平的样品丰度。
+```{R}
+plot_heatmap(physeq1)
+
+```
+
+纵坐标修改为门水平的样品丰度
+```{R}
+plot_heatmap(physeq1, taxa.label="Phylum")
+```
+可以访问所有典型的physoSeq工具，但不依赖任何包的输入。
+><font size=2>As you can see, you gain access to the all the typical phyloseq tools, but without relying on any of the import wrappers.</font>
+
+### MG-RAST
+
+最近关于MG-RAST输出的biom格式文件导入phyloseq在下面这个网址被讨论的很清楚：
+https://github.com/joey711/phyloseq/issues/272
+
+对于这个特殊的biom文件目前还不能使用implot_biom导入。或者说，import_biom函数预测了一个由新版本QIIME产生的特殊的BIOM-format。关于MG-RAST和phyloseq的问题，该文章提供了一个使用强制函数和phyloseq构造函数手动导入数据的示例。
+
+><font size=2>The otherwise-recommended import_biom function does not work properly (for now) on this special variant of the BIOM-format. Or said another way, the import_biom function anticipates a different special variant of the BIOM-format the is generated by recent versions of QIIME. The issue post about MG-RAST and phyloseq provides an example for importing the data manually using coercion functions and phyloseq constructors.</font>
+
+microbio-me-qiime是physoSeq中用于与qiime-db接口的函数。Qiime-DB无限期关闭。此处列出的功能仅供参考。本节中的以下详细信息是服务器仍在运行时最新的有用教程详细信息
+
+><font size=2>microbio_me_qiime is a function in phyloseq that USED TO interface with QIIME_DB. QIIME-DB IS DOWN INDEFINITELY. The function is listed here for reference only. The following details in this section are the most recent useful tutorial details when the server was still up</font>
+
+需要设置一个帐户来浏览可用的数据集及其ID。如果已经知道一个数据集ID或其分配的编号，那么可以提供它作为此函数的唯一参数，它将下载、解压并将数据导入r，所有这些都在一个命令中。或者，如果您已经从qiime服务器下载了数据，将其本地保存在硬盘上，则可以提供此targz或zip文件的本地路径，它将执行解压和导入步骤。我发现这对于创建方法和图形的演示越来越有用，并且如果自己的数据已经托管在microbio.me服务器上，这对于提供完全可复制的分析是非常有效的方法。
+
+><font size=2>You will need to setup an account to browse the available data sets and their IDs. If you know a datasets ID already, or its assigned number, you can provide that as the sole argument to this function and it will download, unpack, and import the data into R, all in one command. Alternatively,if you have already downloaded the data from the QIIME server, and now have it locally on your hard drive, you can provide the local path to this tar-gz or zip file, and it will perform the unpacking and importing step for you. I’m finding this increasingly useful for creating demonstrations of methods and graphics, and can be a very effective way for you to provide fully reproducible analysis if your own data is already hosted on the microbio.me server.</font>
+
+#### 数据导入函数集合
+*The import family of functions*
+
+#### 基于biom格式数据导入
+*import_biom*
+这里我们学习phyloseq封装的最后一个文件：代表序列文件；格式同Qiime usearch等常规分析软件输出一样。
+
+Qiime的新版本生成了更全面和正式定义的JSON或HDF5文件格式，称为biom文件格式：
+
+><font size=2>Newer versions of QIIME produce a more-comprehensive and formally-defined JSON or HDF5 file format, called biom file format:</font>
+
+“biom文件格式（标准发音为‘biome’）是一种通用格式，用于表示一个或多个生物样本的观测计数。Biom是地球微生物群项目公认的标准，是一个基因组学标准联盟候选项目。”
+
+><font size=2>“The biom file format (canonically pronounced ‘biome’) is designed to be a general-use format for representing counts of observations in one or more biological samples. BIOM is a recognized standard for the Earth Microbiome Project and is a Genomics Standards Consortium candidate project.”</font>
+
+<http://biom-format.org/>
+
+physoseq包括有不同级别和组织水平的生物文件的小示例。下面显示了如何导入四种主要类型的生物文件（实际上，不需要知道文件是哪种类型，只需要知道它是一个biom文件）。此外，import_biom函数允许您同时导入相关的系统发育树文件和参考导入系统发育序列数据,例如fasta
+
+><font size=2>The phyloseq package includes small examples of biom files with different levels and organization of data. The following shows how to import each of the four main types of biom files (in practice, you don’t need to know which type your file is, only that it is a biom file). In addition, the import_biom function allows you to simultaneously import an associated phylogenetic tree file and reference sequence file (e.g. fasta).</font>
+
+首先，定义文件路径.该功能封装在physoseq包中，因此我们使用system.file命令来获取路径。如果已经安装了physoseq，无论操作系统如何，这也应该在系统上工作。
+
+><font size=2>First, define the file paths. In this case, this will be within the phyloseq package, so we use special features of the system.file command to get the paths. This should also work on your system if you have phyloseq installed, regardless of your Operating System.</font>
+
+```{R}
+rich_dense_biom  = system.file("extdata", "rich_dense_otu_table.biom",  package="phyloseq")
+rich_sparse_biom = system.file("extdata", "rich_sparse_otu_table.biom", package="phyloseq")
+min_dense_biom   = system.file("extdata", "min_dense_otu_table.biom",   package="phyloseq")
+min_sparse_biom  = system.file("extdata", "min_sparse_otu_table.biom",  package="phyloseq")
+treefilename = system.file("extdata", "biom-tree.phy",  package="phyloseq")
+refseqfilename = system.file("extdata", "biom-refseq.fasta",  package="phyloseq")
+```
+
+既然我们已经定义了文件路径，我们使用其作为import_biom函数的参数。请注意，发育树文件和引用序列文件都适用于任何示例biom文件，这就是为什么我们每个文件只需要一个路径的原因。在实践中，需要指定与其余数据匹配的序列或发育树文件的路径（包括树提示名称和序列头）。
+
+><font size=2>Now that we’ve defined the file paths, let’s use these as argument to the import_biom function. Note that the tree and reference sequence files are both suitable for any of the example biom files, which is why we only need one path for each. In practice, you will be specifying a path to a sequence or tree file that matches the rest of your data (include tree tip names and sequence headers)</font>
+
+```{R}
+import_biom(rich_dense_biom, treefilename, refseqfilename, parseFunction=parse_taxonomy_greengenes)
+```
+
+实际中，把导入的结果存储为一些变量名，比如mydata，然后在下游数据操作和分析中使用这个数据对象。例如，
+
+><font size=2>In practice, you will store the result of your import as some variable name, like myData, and then use this data object in downstream data manipulations and analysis. For example,</font>
+
+```{R}
+myData = import_biom(rich_dense_biom, treefilename, refseqfilename, parseFunction=parse_taxonomy_greengenes)
+myData
+```
+
+```{R}
+import_biom(min_dense_biom, treefilename, refseqfilename, parseFunction=parse_taxonomy_greengenes)
+```
+
+```{R}
+import_biom(min_sparse_biom, treefilename, refseqfilename, parseFunction=parse_taxonomy_greengenes)
+
+```
+
+
+再次可视化进化树，由此可见作者对于自己写的plot_tree函数是有多么的喜欢。
+
+```{R}
+
+plot_tree(myData, color="Genus", shape="BODY_SITE", size="abundance")
+
+```
+
+
+#### 这里提供六种alpha多样性计算指标
+
+
+```{R}
+plot_richness(myData, x="BODY_SITE", color="Description")
+
+```
+
+可视化物种丰度信息
+```{R}
+plot_bar(myData, fill="Genus")
+
+
+```
+#### 基于代表序列文件的提取查看
+
+```{R}
+refseq(myData)
+```
+
+### import_qiime qiime格式数据导入
+Qiime最初以唯一的格式生成输出文件。这些格式可以使用physoSeq函数导入，尤其是包含OTU丰度和分类标识信息的OTU文件。map-file也是存储样本协变量的qiime的重要输入，它可以自然地转换为physoSeq包中sample_data-class数据类型。qiime还可以为每个OTU生成一个系统进化树，可以通过函数输入或者单独使用read_tree。
+
+><font size=2>QIIME originally produced output files in its own uniquely-defined format. These legacy formats can be imported using phyloseq functions, including especially an OTU file that typically contains both OTU-abundance and taxonomic identity information. The map-file is also an important input to QIIME that stores sample covariates, converted naturally to the sample_data-class component data type in the phyloseq-package. QIIME may also produce a phylogenetic tree with a tip for each OTU, which can also be imported by this function, or separately using read_tree.</font>
+
+有关使用qiime的详细信息，请参见qiime.org。虽然有许多复杂的依赖项，但qiime可以作为预下载的Linux虚拟机运行off the shelf。
+
+><font size=2>See qiime.org for details on using QIIME. While there are many complex dependencies, QIIME can be downloaded as a pre-installed linux virtual machine that runs “off the shelf”</font>
+
+对于导入到phyloSeq中的文件没有在Qiime pipeline中运行的问题。有关在输出目录中查找相关文件的位置的示例，请参阅physoseq vignette
+
+><font size=2>The different files useful for import to phyloseq are not collocated in a typical run of the QIIME pipeline. See the basics phyloseq vignette for an example of where to find the relevant files in the output directory.</font>
+
+```{R}
+otufile = system.file("extdata", "GP_otu_table_rand_short.txt.gz", package="phyloseq")
+mapfile = system.file("extdata", "master_map.txt", package="phyloseq")
+trefile = system.file("extdata", "GP_tree_rand_short.newick.gz", package="phyloseq")
+rs_file = system.file("extdata", "qiime500-refseq.fasta", package="phyloseq")
+qiimedata = import_qiime(otufile, mapfile, trefile, rs_file)
+qiimedata
+```
+
+所以，让我们尝试从新导入的数据集qiimedata来构建图形。
+
+><font size=2>So it has Let’s try some quick graphics built from our newly-imported dataset, qiimedata</font>
+
+```{R}
+plot_bar(qiimedata, x="SampleType", fill="Phylum")
+```
+
+```{R}
+plot_heatmap(qiimedata, sample.label="SampleType", species.label="Phylum")
+```
+
+### import_mothur mothur格式数据导入
+
+mothur是开放源码、独立于平台、本地安装的软件包，可以处理barcoded,amplicon序列并执行OTU聚类等。
+
+><font size=2>The open-source, platform-independent, locally-installed software package, “mothur”“, can process barcoded amplicon sequences and perform OTU-clustering, among other things. It is extensively documented on a wiki at the mothur wiki.</font>
+
+```{R}
+mothlist  = system.file("extdata", "esophagus.fn.list.gz", package="phyloseq")
+mothgroup = system.file("extdata", "esophagus.good.groups.gz", package="phyloseq")
+mothtree  = system.file("extdata", "esophagus.tree.gz", package="phyloseq")
+show_mothur_cutoffs(mothlist)
+```
+
+```{R}
+cutoff    = "0.10"
+x = import_mothur(mothlist, mothgroup, mothtree, cutoff)
+x
+```
+
+
+```{R}
+plot_tree(x, color="samples")
+```
+
+加入mapping文件
+```{R}
+SDF = data.frame(samples=sample_names(x), row.names=sample_names(x))
+sample_data(x) <- sample_data(SDF)
+plot_richness(x)
+```
+import_mothur返回的对象中的分类和数据取决于参数。如果提供了前三个参数，那么应该返回一个包含发育树及其相关的OTU表的physoSeq。如果只提供列表和分类文件，则返回otu_table。同样，如果只提供列表和树文件，那么只返回树（“phylo”类）。
+
+><font size=2>The class and data in the object returned by import_mothur depends on the arguments. If the first three arguments are provided, then a phyloseq object should be returned containing both a tree and its associated OTU table. If only a list and group file are provided, then an “otu_table” object is returned. Similarly, if only a list and tree file are provided, then only a tree is returned (“phylo” class)</font>
+
+
+输出发育树
+
+*Returns just a tree*
+```{R}
+x1 = import_mothur(mothlist, mothur_tree_file=mothtree, cutoff="0.10")
+x2 = import_mothur(mothlist, mothur_tree_file=mothtree, cutoff="0.08")
+plot(x1)
+
+```
+
+输出OTU表
+
+*Returns just an OTU table*
+```{R}
+OTU = import_mothur(mothlist, mothgroup, cutoff="0.08")
+dim(OTU)
+```
+
+### import_pyrotagger
+
+PyroTagger由Joint Genome Institute创建和维护
+
+><font size=2>PyroTagger is created and maintained by the Joint Genome Institute</font>
+
+PyroTagger典型的输出形式是表格格式.xls，带来了导入phyloSeq数据格式的麻烦。但是，几乎所有电子表格应用程序都支持“.xls”格式，并且可以进一步以制表符分隔的格式导出此文件。建议将XLS文件转换为以制表符分隔的文本文件，而不进行任何修改。取消选择任何选项以引号形式封装字段，因为每个单元格内容周围的额外引号可能会在文件处理过程中导致问题。这些引用也会增加文件大小，因此尽可能不使用它们，同时也抵制了“人工”修改XLS文件的诱惑。
+
+><font size=2>The typical output form PyroTagger is a spreadsheet format “.xls”, which poses additional import Importing phyloseq Data challenges. However, virtually all spreadsheet applications support the “.xls” format, and can further export this file in a tab-delimited format. It is recommended that you convert the xls-file without any modification (as tempting as it might be once you have loaded it) into a tab-delimited text file. Deselect any options to encapsulate fields in quotes, as extra quotes around each cell’s contents might cause problems during file processing. These quotes will also inflate the file-size, so leave them out as much as possible, while also resisting any temptation to modify the xls-file “by hand”.</font>
+
+作为跨平台OpenOffice suite的一部分，我们可以获得功能强大、免费的电子表格应用程序，并可用于上述需求的转换。
+
+><font size=2>A highly-functional and free spreadsheet application can be obtained as part of the cross-platform OpenOffice suite, and works for the above required conversion.</font>
+
+很遗憾，这个导入程序不能直接将XLS文件作为输入。但是，由于电子表格文件格式的moving-target性质，无法直接将这些格式导入R。与其增加对emphphyloseq的依赖性和xls-support包的相对支持，选择一个任意分隔的文本格式更有效率，并且应该关注PyroTagger输出中的数据结构。
+
+><font size=2>It is regrettable that this importer does not take the xls-file directly as input. However, because of the moving-target nature of spreadsheet file formats, there is limited support for direct import of these formats into R. Rather than add to the dependency requirements of emphphyloseq and the relative support of these xls-support packages, it seems more efficient to choose an arbitrary delimited text format, and focus on the data structure in the PyroTagger output. This will be easier to support in the long-run.</font>
+
+例如，以制表符分隔的文件的路径可以另存为以制表符分隔的文件，并通过以下命令实现：
+
+><font size=2>For example, the path to a pyrotagger tab-delimited file might be saved as pyrotagger_tab_file , and can be imported using</font>
+
+我没用过这种方法，提供命令，大家备用。
+```{R eval=FALSE, include=FALSE}
+import_pyrotagger_tab(pyrotagger_tab_file)
+
+```
+
+
